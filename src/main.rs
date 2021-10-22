@@ -1,129 +1,130 @@
-use std::{convert::Infallible, env, net::SocketAddr};
+use std::{env, future::Future, pin::Pin};
 
-use anyhow::Context;
-use async_std::{
-    stream::StreamExt,
-    task::{self},
+use argh::FromArgs;
+use async_std::task;
+use color_eyre::{
+    eyre::{Context, ContextCompat},
+    Help,
 };
-use hyper::{
-    service::{make_service_fn, service_fn},
-    Body, Response, Server, StatusCode,
-};
-use indoc::indoc;
-use rspotify::{
-    clients::OAuthClient, model::SavedTrack, scopes, AuthCodeSpotify, Credentials, OAuth,
-};
-use tracing::info;
+use rspotify::{clients::OAuthClient, scopes, AuthCodeSpotify, Config, Credentials, OAuth};
+use tracing::{debug, error, info, trace};
+use tracing_subscriber::EnvFilter;
+
+mod auth;
+mod output;
+mod web;
 
 const REDIRECT_URL: &str = "http://localhost:8080";
 
-fn main() -> anyhow::Result<()> {
-    task::block_on(start())
+/// Generate CSV files from spotify playlists
+#[derive(FromArgs, Debug)]
+struct Arguments {
+    #[argh(subcommand)]
+    command: Command,
 }
 
-async fn start() -> anyhow::Result<()> {
-    // TODO: CACHE + SAVE LOGIN
-    // TODO: MAKE BETTER
+#[derive(FromArgs, Debug)]
+#[argh(subcommand)]
+enum Command {
+    GetToken(GetTokenArgs),
+    Write(WriteArgs),
+}
+
+/// Get an authentication token for caching between runs
+#[derive(FromArgs, Debug)]
+#[argh(subcommand, name = "get-token")]
+struct GetTokenArgs {}
+
+/// Write the csv file
+#[derive(FromArgs, Debug)]
+#[argh(subcommand, name = "write")]
+struct WriteArgs {}
+
+fn main() -> color_eyre::Result<()> {
+    // Setup error reporting
+    color_eyre::install()?;
+
+    // Setup logging
+    tracing_subscriber::fmt()
+        .pretty()
+        .with_env_filter(
+            EnvFilter::from_default_env()
+                .add_directive(format!("{}=trace", env!("CARGO_CRATE_NAME")).parse()?),
+        )
+        .init();
+
+    // Setup CI specific behavior
     let ci = env::var("CI").is_ok();
 
-    tracing_subscriber::fmt().init();
-
-    let creds = Credentials::from_env().context("no rspotify credentials")?;
-    let oauth = OAuth {
-        scopes: scopes!("user-library-read"),
-        redirect_uri: REDIRECT_URL.into(),
-        ..Default::default()
-    };
-
-    let mut spotify = AuthCodeSpotify::new(creds, oauth);
-
-    let (auth_code_tx, auth_code_rx) = flume::bounded::<String>(1);
-
-    let (web_server_shutdown_tx, web_server_shutdown_rx) = flume::bounded::<()>(0);
-
-    let server = Server::bind(&SocketAddr::from(([127, 0, 0, 1], 8080))).serve(make_service_fn(move |target| {
-            let web_server_shutdown_tx = web_server_shutdown_tx.clone();
-            let auth_code_tx = auth_code_tx.clone();
-
-            async move {
-                Ok::<_, Infallible>(service_fn(move |request| {
-                    let web_server_shutdown_tx = web_server_shutdown_tx.clone();
-                    let auth_code_tx = auth_code_tx.clone();
-
-                    async move {
-                        auth_code_tx.send_async(format!("{}{}", REDIRECT_URL, request.uri())).await.unwrap();
-
-                        web_server_shutdown_tx.send_async(()).await.unwrap();
-
-                        Response::builder()
-                            .status(StatusCode::OK)
-                            .header("Content-Type", "text/html")
-                            .body(Body::from(indoc!{"
-                                <html>
-                                    <head>
-                                        <script>
-                                            setTimeout(() => window.close(), 1000);
-                                        </script>
-                                    </head>
-                                    <body>
-                                        <center>This page will automatically close in 1 second</center>
-                                    </body>
-                                </html>
-                            "}))  
-                    }
-                }))
-            }
-        }));
-
-    webbrowser::open(&spotify.get_authorize_url(false)?)?;
-
-    server
-        .with_graceful_shutdown(async move {
-            web_server_shutdown_rx.recv_async().await.unwrap();
-        })
-        .await
-        .unwrap();
-
-    let auth_code = auth_code_rx.recv()?;
-
-    let auth_code = spotify
-        .parse_response_code(&auth_code)
-        .context("failed to parse auth code")?;
-
-    spotify.request_token(&auth_code).await?;
-
-    let mut liked_songs = spotify.current_user_saved_tracks(None);
-
-    let mut csv = csv::Writer::from_path("./liked_songs.csv")?;
-
-    csv.write_record([
-        "added at",
-        "release date",
-        "name",
-        "album",
-        "artist(s)",
-        "popularity",
-        "id",
-    ])?;
-
-    while let Some(song) = liked_songs.next().await {
-        let SavedTrack { added_at, track } = song?;
-
-        csv.write_record([
-            added_at.to_rfc3339(),
-            track.album.release_date.unwrap_or_default(),
-            track.name,
-            track.album.name,
-            track
-                .artists
-                .iter()
-                .map(|artist| artist.name.as_str())
-                .collect::<Vec<&str>>()
-                .join("+"),
-            track.popularity.to_string(),
-            track.id.to_string(),
-        ])?;
+    if ci {
+        debug!("Running in CI environment");
+    } else {
+        debug!("Not running in CI environment");
     }
+
+    // Parse arguments
+    let args: Arguments = argh::from_env();
+
+    // Ensure valid options
+    if matches!(args.command, Command::GetToken(_)) && ci {
+        error!("Cannot run get-token in a CI environment");
+
+        return Ok(());
+    }
+
+    // Load the spotify credentials
+    let creds = Credentials::from_env()
+        .wrap_err("no rspotify credentials")
+        .warning("make sure you are providing the required environment variables")
+        .note("missing either RSPOTIFY_CLIENT_ID or RSPOTIFY_CLIENT_SECRET")?;
+
+    // Setup the spotify client
+    let spotify = AuthCodeSpotify::with_config(
+        creds,
+        OAuth {
+            scopes: scopes!("user-library-read"),
+            redirect_uri: REDIRECT_URL.into(),
+            ..Default::default()
+        },
+        Config {
+            token_cached: true,
+            ..Default::default()
+        },
+    );
+
+    // Drop into the async runtime after the initial setup
+    task::block_on::<Pin<Box<dyn Future<Output = _>>>, _>(match args.command {
+        Command::GetToken(args) => Box::pin(get_token(args, spotify)),
+        Command::Write(args) => Box::pin(write(args, spotify)),
+    })
+}
+
+#[tracing::instrument(err, skip(spotify))]
+async fn get_token(args: GetTokenArgs, mut spotify: AuthCodeSpotify) -> color_eyre::Result<()> {
+    // TODO: CACHE + SAVE LOGIN
+    // TODO: MAKE BETTER
+
+    debug!("Updating credentials");
+    auth::update_credentials(&mut spotify)
+        .await
+        .wrap_err("failed to update credentials")?;
+
+    Ok(())
+}
+
+#[tracing::instrument(err, skip(spotify))]
+async fn write(args: WriteArgs, spotify: AuthCodeSpotify) -> color_eyre::Result<()> {
+    info!("Loading user's saved tracks");
+    let liked_songs = spotify.current_user_saved_tracks(None);
+
+    let filename = "./liked_songs.csv";
+    let mut csv = csv::Writer::from_path(&filename)?;
+
+    info!(?filename, "Writing saved tracks");
+    output::write_all_records(&mut csv, liked_songs)
+        .await
+        .wrap_err("failed to write output data")
+        .with_warning(|| format!("make sure the file {} is writeable", filename))?;
 
     Ok(())
 }

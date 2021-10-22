@@ -4,12 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"
+argh = "0.1"
 async-std = { version = "1.10", features = ["tokio1"] }
+color-eyre = "0.5"
 csv = "1.1"
 dotenv = "0.15"
 flume = "0.10"
-git2 = "0.13"
 hyper = { version = "0.14", features = ["server"] }
 indoc = "1.0"
 rspotify = { version = "0.11", features = ["env-file"] }
@@ -19,3 +19,5 @@ webbrowser = "0.5"
 
 [profile.release]
 lto = "fat"
+
+[features]
