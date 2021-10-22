@@ -3,11 +3,14 @@ use std::{env, future::Future, pin::Pin};
 use argh::FromArgs;
 use async_std::task;
 use color_eyre::{
-    eyre::{Context, ContextCompat},
+    eyre::{bail, eyre, Context, ContextCompat},
     Help,
 };
-use rspotify::{clients::OAuthClient, scopes, AuthCodeSpotify, Config, Credentials, OAuth};
-use tracing::{debug, error, info, trace};
+use rspotify::{
+    clients::{BaseClient, OAuthClient},
+    scopes, AuthCodeSpotify, Config, Credentials, OAuth,
+};
+use tracing::{debug, info, trace};
 use tracing_subscriber::EnvFilter;
 
 mod auth;
@@ -67,9 +70,7 @@ fn main() -> color_eyre::Result<()> {
 
     // Ensure valid options
     if matches!(args.command, Command::GetToken(_)) && ci {
-        error!("Cannot run get-token in a CI environment");
-
-        return Ok(());
+        bail!("Cannot run get-token in a CI environment");
     }
 
     // Load the spotify credentials
@@ -88,6 +89,7 @@ fn main() -> color_eyre::Result<()> {
         },
         Config {
             token_cached: true,
+            token_refreshing: true,
             ..Default::default()
         },
     );
@@ -96,10 +98,12 @@ fn main() -> color_eyre::Result<()> {
     task::block_on::<Pin<Box<dyn Future<Output = _>>>, _>(match args.command {
         Command::GetToken(args) => Box::pin(get_token(args, spotify)),
         Command::Write(args) => Box::pin(write(args, spotify)),
-    })
+    })?;
+
+    Ok(())
 }
 
-#[tracing::instrument(err, skip(spotify))]
+#[tracing::instrument(skip(spotify))]
 async fn get_token(args: GetTokenArgs, mut spotify: AuthCodeSpotify) -> color_eyre::Result<()> {
     // TODO: CACHE + SAVE LOGIN
     // TODO: MAKE BETTER
@@ -112,8 +116,24 @@ async fn get_token(args: GetTokenArgs, mut spotify: AuthCodeSpotify) -> color_ey
     Ok(())
 }
 
-#[tracing::instrument(err, skip(spotify))]
-async fn write(args: WriteArgs, spotify: AuthCodeSpotify) -> color_eyre::Result<()> {
+#[tracing::instrument(skip(spotify))]
+async fn write(args: WriteArgs, mut spotify: AuthCodeSpotify) -> color_eyre::Result<()> {
+    trace!("Reading token from token cache");
+    let token = spotify
+        .read_token_cache()
+        .await
+        .wrap_err("failed to read the token cache")
+        .note("does the cache exist?")?;
+
+    match token {
+        Some(token) => *spotify.get_token().lock().await.unwrap() = Some(token),
+        None => {
+            return Err(eyre!("spotify authentication invalid").note(
+                "you may need to update the scopes or refresh token manually with `get-token`",
+            ))
+        }
+    }
+
     info!("Loading user's saved tracks");
     let liked_songs = spotify.current_user_saved_tracks(None);
 

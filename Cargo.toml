@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 argh = "0.1"
 async-std = { version = "1.10", features = ["tokio1"] }
-color-eyre = "0.5"
+color-eyre = { version = "0.5", default-features = false }
 csv = "1.1"
 dotenv = "0.15"
 flume = "0.10"
