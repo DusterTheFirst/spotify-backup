@@ -2,6 +2,7 @@
 name = "spotify-backup"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.56"
 
 [dependencies]
 argh = "0.1"

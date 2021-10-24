@@ -12,9 +12,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+
+    - name: Install Rust 1.56
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: 1.56
+          default: true
+
     - name: Build
-      run: cargo build --release --verbose
-    - uses: "marvinpinto/action-automatic-releases@latest"
+      uses: actions-rs/cargo@v1
+      with:
+          command: build
+          args: --release --all-features --verbose
+
+    - name: Release
+      uses: "marvinpinto/action-automatic-releases@latest"
       with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "latest"
