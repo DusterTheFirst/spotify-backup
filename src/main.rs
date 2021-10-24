@@ -105,13 +105,15 @@ fn main() -> color_eyre::Result<()> {
 
 #[tracing::instrument(skip(spotify))]
 async fn get_token(args: GetTokenArgs, mut spotify: AuthCodeSpotify) -> color_eyre::Result<()> {
-    // TODO: CACHE + SAVE LOGIN
-    // TODO: MAKE BETTER
-
     debug!("Updating credentials");
     auth::update_credentials(&mut spotify)
         .await
         .wrap_err("failed to update credentials")?;
+
+    info!(
+        cache_path = ?spotify.get_config().cache_path,
+        "Credentials have been saved",
+    );
 
     Ok(())
 }
@@ -120,7 +122,7 @@ async fn get_token(args: GetTokenArgs, mut spotify: AuthCodeSpotify) -> color_ey
 async fn write(args: WriteArgs, mut spotify: AuthCodeSpotify) -> color_eyre::Result<()> {
     trace!("Reading token from token cache");
     let token = spotify
-        .read_token_cache()
+        .read_token_cache(true)
         .await
         .wrap_err("failed to read the token cache")
         .note("does the cache exist?")?;

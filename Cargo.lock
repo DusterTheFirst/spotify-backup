@@ -879,9 +879,9 @@ dependencies = [
 
 [[package]]
 name = "matchers"
-version = "0.0.1"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f099785f7595cc4b4553a174ce30dd7589ef93391ff414dbb67f62392b9e0ce1"
+checksum = "8263075bb86c5a1b1427b5ae862e8889656f126e9f77c484496e8b47cf5c5558"
 dependencies = [
  "regex-automata",
 ]
@@ -1292,8 +1292,7 @@ dependencies = [
 [[package]]
 name = "rspotify"
 version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b25341ebdad57994f7dbf1c0d84ef0aec165adbb2a06977ad4aa0a1433413cd"
+source = "git+https://github.com/DusterTheFirst/rspotify?branch=patch-1#ebdb89779f58c95fbfae1f4f56c16601f946d731"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -1317,8 +1316,7 @@ dependencies = [
 [[package]]
 name = "rspotify-http"
 version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a463b12a9b73da057d88be95cdf8f70871f233a2a6f8ef3569a67645c9af5c15"
+source = "git+https://github.com/DusterTheFirst/rspotify?branch=patch-1#ebdb89779f58c95fbfae1f4f56c16601f946d731"
 dependencies = [
  "async-trait",
  "log",
@@ -1331,14 +1329,12 @@ dependencies = [
 [[package]]
 name = "rspotify-macros"
 version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1087d00b5e342189fb541dc1ef2fead32462be9004913dce3edf61bf4d38e817"
+source = "git+https://github.com/DusterTheFirst/rspotify?branch=patch-1#ebdb89779f58c95fbfae1f4f56c16601f946d731"
 
 [[package]]
 name = "rspotify-model"
 version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dadf60b6d8136859dad4d37e1ca0a416f2576265143fd797dd87858067864975"
+source = "git+https://github.com/DusterTheFirst/rspotify?branch=patch-1#ebdb89779f58c95fbfae1f4f56c16601f946d731"
 dependencies = [
  "chrono",
  "serde",
@@ -1721,35 +1717,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-serde"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb65ea441fbb84f9f6748fd496cf7f63ec9af5bca94dd86456978d055e8eb28b"
-dependencies = [
- "serde",
- "tracing-core",
-]
-
-[[package]]
 name = "tracing-subscriber"
-version = "0.2.25"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0d2eaa99c3c2e41547cfa109e910a68ea03823cccad4a0525dcbc9b01e8c71"
+checksum = "5cf865b5ddc38e503a29c41c4843e616a73028ae18c637bc3eb2afaef4909c84"
 dependencies = [
  "ansi_term",
- "chrono",
  "lazy_static",
  "matchers",
  "regex",
- "serde",
- "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
  "tracing-log",
- "tracing-serde",
 ]
 
 [[package]]
