@@ -3,16 +3,26 @@ use lambda_runtime::{Context, Error};
 use log::{info, trace, LevelFilter};
 use rspotify::{scopes, AuthCodeSpotify, Credentials};
 use serde_json::Value;
-use simplelog::{ColorChoice, TermLogger, TerminalMode};
+use simplelog::{ColorChoice, CombinedLogger, TermLogger, TerminalMode};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    TermLogger::init(
-        LevelFilter::Trace,
-        simplelog::Config::default(),
-        TerminalMode::Mixed,
-        ColorChoice::Always,
-    )?;
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            LevelFilter::Warn,
+            simplelog::Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Always,
+        ),
+        TermLogger::new(
+            LevelFilter::Trace,
+            simplelog::ConfigBuilder::new()
+                .add_filter_allow_str("auth")
+                .build(),
+            TerminalMode::Mixed,
+            ColorChoice::Always,
+        ),
+    ])?;
 
     lambda_runtime::run(lambda_http::handler(handler)).await?;
     Ok(())
