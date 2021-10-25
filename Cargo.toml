@@ -7,37 +7,21 @@ rust-version = "1.56"
 [profile.release]
 lto = "fat"
 
-[[bin]]
-name = "bootstrap"
-path = "src/bin-bootstrap.rs"
-required-features = ["bootstrap"]
-
-[[bin]]
-name = "setup"
-path = "src/bin-setup.rs"
-required-features = ["setup"]
-
-[features]
-bootstrap = ["csv", "lambda_runtime"]
-setup = ["hyper", "webbrowser", "dotenv", "flume", "indoc"]
-
 [dependencies]
+argh = "0.1"
 async-std = { version = "1.10", features = ["tokio1"] }
 color-eyre = { version = "0.5", default-features = false }
+csv = "1.1"
+dotenv = "0.15"
+flume = "0.10"
+git2 = "0.13"
+hyper = { version = "0.14", features = ["server"] }
+indoc = "1.0"
 rspotify = { version = "0.11", features = ["reqwest-rustls-tls"] }
+temp-dir = "0.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# For running on aws lambda
-csv = { version = "1.1", optional = true }
-lambda_runtime = { version = "0.4", optional = true }
-
-# For setting up authentication locally
-dotenv = { version = "0.15", optional = true }
-flume = { version = "0.10", optional = true }
-hyper = { version = "0.14", features = ["server"], optional = true }
-indoc = { version = "1.0", optional = true }
-webbrowser = { version = "0.5", optional = true }
+webbrowser = "0.5"
 
 [patch.crates-io]
 rspotify = { git = "https://github.com/DusterTheFirst/rspotify", branch = "patch-1" }

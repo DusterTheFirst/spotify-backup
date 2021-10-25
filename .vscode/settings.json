@@ -1,4 +1,10 @@
 {
-    "cSpell.words": ["argh", "reauth", "rspotify", "webbrowser"],
+    "cSpell.words": [
+        "argh",
+        "reauth",
+        "refspecs",
+        "rspotify",
+        "webbrowser"
+    ],
     "rust-analyzer.cargo.allFeatures": true
 }
