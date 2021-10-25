@@ -8,5 +8,6 @@ async fn main() -> Result<(), Error> {
 }
 
 async fn handler(event: Value, _ctx: Context) -> Result<Value, Error> {
+    
     Ok(event)
 }

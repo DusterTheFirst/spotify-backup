@@ -30,6 +30,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
+name = "backup"
+version = "0.1.0"
+dependencies = [
+ "lambda_runtime",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "bytes"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -409,15 +418,6 @@ checksum = "5dc90fe6c7be1a323296982db1836d1ea9e47b6839496dde9a541bc496df3516"
 dependencies = [
  "libc",
  "winapi",
-]
-
-[[package]]
-name = "spotify_backup"
-version = "0.1.0"
-dependencies = [
- "lambda_runtime",
- "serde_json",
- "tokio",
 ]
 
 [[package]]
