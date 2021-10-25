@@ -1,4 +1,3 @@
-/target
-.env
-liked_songs.csv
-.spotify_token_cache.json
+node_modules
+.serverless
+target

@@ -1,4 +1,5 @@
 {
-    "cSpell.words": ["argh", "reauth", "rspotify", "webbrowser"],
-    "rust-analyzer.cargo.allFeatures": true
+    "cSpell.words": [
+        "hecrj"
+    ]
 }
