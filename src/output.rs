@@ -5,7 +5,7 @@ use color_eyre::eyre::Context;
 use rspotify::{clients::pagination::Paginator, model::SavedTrack, ClientResult};
 
 pub async fn write_all_records<'w, 'f, W: Write>(
-    writer: &'w mut csv::Writer<W>,
+    mut writer: csv::Writer<W>,
     mut song_list: Paginator<'f, ClientResult<SavedTrack>>,
 ) -> color_eyre::Result<()> {
     writer
@@ -15,7 +15,6 @@ pub async fn write_all_records<'w, 'f, W: Write>(
             "name",
             "album",
             "artist(s)",
-            "popularity",
             "id",
         ])
         .wrap_err("failed to write header")?;
@@ -35,11 +34,12 @@ pub async fn write_all_records<'w, 'f, W: Write>(
                     .map(|artist| artist.name.as_str())
                     .collect::<Vec<&str>>()
                     .join("+"),
-                track.popularity.to_string(),
                 track.id.to_string(),
             ])
             .wrap_err("failed to write record")?;
     }
+
+    writer.flush().wrap_err("failed to flush the writer")?;
 
     Ok(())
 }

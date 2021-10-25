@@ -317,7 +317,7 @@ dependencies = [
  "num-traits",
  "rustc-serialize",
  "serde",
- "time",
+ "time 0.1.44",
  "winapi",
 ]
 
@@ -1640,6 +1640,7 @@ dependencies = [
  "indoc",
  "rspotify",
  "temp-dir",
+ "time 0.3.3",
  "tracing",
  "tracing-subscriber",
  "webbrowser",
@@ -1736,6 +1737,23 @@ dependencies = [
  "wasi",
  "winapi",
 ]
+
+[[package]]
+name = "time"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cde1cf55178e0293453ba2cca0d5f8392a922e52aa958aee9c28ed02becc6d03"
+dependencies = [
+ "itoa",
+ "libc",
+ "time-macros",
+]
+
+[[package]]
+name = "time-macros"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25eb0ca3468fc0acc11828786797f6ef9aa1555e4a211a60d64cc8e4d1be47d6"
 
 [[package]]
 name = "tinyvec"

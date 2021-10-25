@@ -9,9 +9,10 @@ use color_eyre::{
 use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature, Status};
 use rspotify::{
     clients::{BaseClient, OAuthClient},
-    scopes, AuthCodeSpotify, Config, Credentials, OAuth,
+    scopes, AuthCodeSpotify, Credentials, OAuth,
 };
 use temp_dir::TempDir;
+use time::{macros::format_description, OffsetDateTime};
 use tracing::{debug, info, metadata::LevelFilter, trace};
 use tracing_subscriber::EnvFilter;
 
@@ -72,7 +73,7 @@ fn main() -> color_eyre::Result<()> {
             redirect_uri: REDIRECT_URL.into(),
             ..Default::default()
         },
-        Config {
+        rspotify::Config {
             token_cached: true,
             token_refreshing: true,
             ..Default::default()
@@ -116,17 +117,20 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
     let liked_songs = spotify.current_user_saved_tracks(None);
 
     let temp_dir = TempDir::new().wrap_err("failed to create temporary directory")?;
-    debug!(dir = ?temp_dir.path(), "Using temporary directory");
+    debug!(dir = ?temp_dir.path(), "Cloning into temporary directory");
 
     let repo = Repository::clone(&args.repo, temp_dir.path())
         .wrap_err("failed to clone repository")
         .with_note(|| format!("make sure you have permission to clone {}", args.repo))?;
 
-    let csv_file = &args.filename;
-    let mut csv = csv::Writer::from_path(temp_dir.child(csv_file))?;
+    trace!("Cloned");
+
+    let csv_file = Path::new(&args.filename);
+
+    let csv = csv::Writer::from_path(temp_dir.path().join(csv_file))?;
 
     info!(?csv_file, "Writing saved tracks");
-    output::write_all_records(&mut csv, liked_songs)
+    output::write_all_records(csv, liked_songs)
         .await
         .wrap_err("failed to write output data")
         .with_warning(|| format!("make sure the file {} is writeable", &args.filename))?;
@@ -137,83 +141,106 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
         .status_file(Path::new(&csv_file))
         .wrap_err("failed to get file status")?;
 
-    if file_status != Status::CURRENT {
-        trace!(?csv_file, "File has changed... creating new commit");
-
-        let config = git2::Config::open_default().wrap_err("failed to open global git config")?;
-
-        let signature = &Signature::now(
-            &config
-                .get_string("user.name")
-                .wrap_err("failed to load user.name from git config")
-                .note("is your git configured correctly")?,
-            &config
-                .get_string("user.email")
-                .wrap_err("failed to load user.name from git config")
-                .note("is your git configured correctly")?,
-        )
-        .wrap_err("failed to create git signature")?;
-
-        let head = repo.head().wrap_err("failed to get HEAD")?;
-
-        let head_tree = head
-            .peel_to_tree()
-            .wrap_err("failed to get tree form HEAD")?;
-
-        repo.commit(
-            Some("HEAD"),
-            &signature,
-            &signature,
-            "New songs",
-            &head_tree,
-            &[&repo
-                .find_commit(
-                    head.resolve()
-                        .wrap_err("failed to resolve the HEAD reference")?
-                        .target()
-                        .expect("target should have an Oid"),
-                )
-                .wrap_err("failed to find the HEAD commit")?],
-        )
-        .wrap_err("failed to commit changes")?;
-
-        trace!("Committed");
-
-        let mut remote = repo
-            .find_remote("origin")
-            .wrap_err("failed to find remote `origin`")?;
-
-        let mut push_options = {
-            let remote = remote.clone();
-
-            let mut callbacks = RemoteCallbacks::new();
-            callbacks.credentials(move |_, _, _| {
-                Cred::credential_helper(
-                    &config,
-                    remote.url().expect("remote url should be valid utf-8"),
-                    None,
-                )
-            });
-
-            let mut options = PushOptions::new();
-            options.remote_callbacks(callbacks);
-
-            options
-        };
-
-        let refspecs = remote.push_refspecs().wrap_err("failed to get refspecs")?;
-
-        remote
-            .push(
-                &refspecs.iter().filter_map(|x| x).collect::<Vec<_>>(),
-                Some(&mut push_options),
-            )
-            .wrap_err("Failed to push")?;
-
-        trace!("Pushed");
-    } else {
+    // FIXME: ALWAYS IS FALSE
+    if file_status == Status::CURRENT {
         info!("File has not changed, nothing to commit");
+        return Ok(());
     }
+
+    trace!(?csv_file, "File has changed... creating new commit");
+
+    let config = git2::Config::open_default().wrap_err("failed to open global git config")?;
+
+    let signature = &Signature::now(
+        &config
+            .get_string("user.name")
+            .wrap_err("failed to load user.name from git config")
+            .note("is your git configured correctly")?,
+        &config
+            .get_string("user.email")
+            .wrap_err("failed to load user.name from git config")
+            .note("is your git configured correctly")?,
+    )
+    .wrap_err("failed to create git signature")?;
+
+    let head = repo.head().wrap_err("failed to get HEAD")?;
+
+    let mut index = repo.index().wrap_err("failed to get repository index")?;
+
+    index
+        .add_path(csv_file)
+        .wrap_err("failed to update index")?;
+
+    let tree_id = index.write_tree().wrap_err("failed to write index")?;
+    let tree = repo
+        .find_tree(tree_id)
+        .wrap_err("failed to get index tree")?;
+
+    repo.commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        &format!(
+            "Song update for {}",
+            OffsetDateTime::now_utc()
+                .date()
+                .format(&format_description!(
+                    "[weekday repr:long], [month repr:long] [day] [year repr:full]"
+                ))
+                .wrap_err("failed to format date")?
+        ),
+        &tree,
+        &[&repo
+            .find_commit(
+                head.resolve()
+                    .wrap_err("failed to resolve the HEAD reference")?
+                    .target()
+                    .expect("target should have an Oid"),
+            )
+            .wrap_err("failed to find the HEAD commit")?],
+    )
+    .wrap_err("failed to commit changes")?;
+
+    trace!("Committed");
+
+    let mut remote = repo
+        .find_remote("origin")
+        .wrap_err("failed to find remote `origin`")?;
+
+    let mut callbacks = RemoteCallbacks::new();
+    callbacks.credentials(|url, username_from_url, _allowed_types| {
+        Cred::credential_helper(&config, url, username_from_url)
+    });
+
+    let mut remote_connection = remote
+        .connect_auth(git2::Direction::Push, Some(callbacks), None)
+        .wrap_err("failed to connect to remote")?;
+
+    let refspecs = remote_connection
+        .list()
+        .wrap_err("failed to get refspecs")?
+        .iter()
+        .map(|head| head.name().to_owned())
+        .collect::<Vec<_>>();
+
+    let mut push_options = {
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.credentials(|url, username_from_url, _allowed_types| {
+            Cred::credential_helper(&config, url, username_from_url)
+        });
+
+        let mut push_options = PushOptions::new();
+        push_options.remote_callbacks(callbacks);
+
+        push_options
+    };
+
+    remote_connection
+        .remote()
+        .push(&refspecs, Some(&mut push_options))
+        .wrap_err("Failed to push")?;
+
+    trace!("Pushed");
 
     Ok(())
 }
