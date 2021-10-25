@@ -26,9 +26,15 @@ env:
 
 functions:
   backup:
-    handler: backup
+    handler: spotify-backup.backup
     events:
       - schedule: cron(0 0 * * ? *)
+  seed:
+    handler: spotify-backup.auth
+    events:
       - http:
           path: /
+          method: get
+      - http:
+          path: /login
           method: get
