@@ -6,7 +6,7 @@ use color_eyre::{
     eyre::{Context, ContextCompat},
     Help,
 };
-use git2::{Cred, Delta, PushOptions, RemoteCallbacks, Repository, Signature, Status};
+use git2::{Cred, Delta, PushOptions, RemoteCallbacks, Repository, Signature};
 use rspotify::{
     clients::{BaseClient, OAuthClient},
     scopes, AuthCodeSpotify, Credentials, OAuth,
@@ -141,7 +141,7 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
 
     let config = git2::Config::open_default().wrap_err("failed to open global git config")?;
 
-    let signature = &Signature::now(
+    let signature = Signature::now(
         &config
             .get_string("user.name")
             .wrap_err("failed to load user.name from git config")
@@ -203,10 +203,7 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
         .diff_tree_to_tree(Some(&previous_commit.tree()?), Some(&commit.tree()?), None)
         .wrap_err("failed to diff file changes")?;
 
-    if diff
-        .deltas()
-        .all(|x| x.status() == Delta::Unmodified)
-    {
+    if diff.deltas().all(|x| x.status() == Delta::Unmodified) {
         info!("File has not changed, nothing to push");
         return Ok(());
     }
