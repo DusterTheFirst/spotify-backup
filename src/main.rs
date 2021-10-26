@@ -6,7 +6,7 @@ use color_eyre::{
     eyre::{Context, ContextCompat},
     Help,
 };
-use git2::{Cred, PushOptions, RemoteCallbacks, Repository, Signature, Status};
+use git2::{Cred, Delta, PushOptions, RemoteCallbacks, Repository, Signature, Status};
 use rspotify::{
     clients::{BaseClient, OAuthClient},
     scopes, AuthCodeSpotify, Credentials, OAuth,
@@ -137,17 +137,7 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
 
     info!(?csv_file, "Done writing saved tracks");
 
-    let file_status = repo
-        .status_file(Path::new(&csv_file))
-        .wrap_err("failed to get file status")?;
-
-    // FIXME: ALWAYS IS FALSE
-    if file_status == Status::CURRENT {
-        info!("File has not changed, nothing to commit");
-        return Ok(());
-    }
-
-    trace!(?csv_file, "File has changed... creating new commit");
+    trace!("Starting git shenanigans");
 
     let config = git2::Config::open_default().wrap_err("failed to open global git config")?;
 
@@ -176,32 +166,52 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
         .find_tree(tree_id)
         .wrap_err("failed to get index tree")?;
 
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        &format!(
-            "Song update for {}",
-            OffsetDateTime::now_utc()
-                .date()
-                .format(&format_description!(
-                    "[weekday repr:long], [month repr:long] [day] [year repr:full]"
-                ))
-                .wrap_err("failed to format date")?
-        ),
-        &tree,
-        &[&repo
-            .find_commit(
-                head.resolve()
-                    .wrap_err("failed to resolve the HEAD reference")?
-                    .target()
-                    .expect("target should have an Oid"),
-            )
-            .wrap_err("failed to find the HEAD commit")?],
-    )
-    .wrap_err("failed to commit changes")?;
+    let previous_commit = &repo
+        .find_commit(
+            head.resolve()
+                .wrap_err("failed to resolve the HEAD reference")?
+                .target()
+                .expect("target should have an Oid"),
+        )
+        .wrap_err("failed to find the HEAD commit")?;
+
+    let commit = repo
+        .commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            &format!(
+                "Song update for {}",
+                OffsetDateTime::now_utc()
+                    .date()
+                    .format(&format_description!(
+                        "[weekday repr:long], [month repr:long] [day] [year repr:full]"
+                    ))
+                    .wrap_err("failed to format date")?
+            ),
+            &tree,
+            &[previous_commit],
+        )
+        .wrap_err("failed to commit changes")?;
+    let commit = repo
+        .find_commit(commit)
+        .wrap_err("failed to find the new commit")?;
 
     trace!("Committed");
+
+    let diff = repo
+        .diff_tree_to_tree(Some(&previous_commit.tree()?), Some(&commit.tree()?), None)
+        .wrap_err("failed to diff file changes")?;
+
+    if diff
+        .deltas()
+        .all(|x| x.status() == Delta::Unmodified)
+    {
+        info!("File has not changed, nothing to push");
+        return Ok(());
+    }
+
+    trace!(?csv_file, "File has changed... pushing new commit");
 
     let mut remote = repo
         .find_remote("origin")
