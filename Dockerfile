@@ -26,5 +26,5 @@ FROM gcr.io/distroless/static-debian11 AS runtime
 WORKDIR /app
 VOLUME [ "/app" ]
 
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/spotify-backup /usr/local/bin
-ENTRYPOINT ["/usr/local/bin/spotify-backup"]
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/spotify-backup /bin/spotify-backup
+CMD ["/bin/spotify-backup"]

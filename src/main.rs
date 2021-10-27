@@ -6,7 +6,10 @@ use color_eyre::{
     eyre::{Context, ContextCompat},
     Help,
 };
-use git2::{Cred, Delta, PushOptions, RemoteCallbacks, Repository, Signature};
+use git2::{
+    Cred, CredentialType, Delta, ErrorClass, ErrorCode, PushOptions, RemoteCallbacks, Repository,
+    Signature,
+};
 use rspotify::{
     clients::{BaseClient, OAuthClient},
     scopes, AuthCodeSpotify, Credentials, OAuth,
@@ -37,6 +40,18 @@ struct Arguments {
         default = "\"liked_songs.csv\".into()"
     )]
     filename: String, // TODO: more than just liked songs
+    /// git user.name
+    #[argh(option, short = 'n', long = "name")]
+    user_name: String,
+    /// git user.email
+    #[argh(option, short = 'e', long = "email")]
+    user_email: String,
+    /// username for authenticating to the repository over http
+    #[argh(option, short = 'u', long = "username")]
+    http_username: Option<String>,
+    /// password for authenticating to the repository over http
+    #[argh(option, short = 'p', long = "password")]
+    http_password: String, // TODO: ssh auth
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -139,19 +154,8 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
 
     trace!("Starting git shenanigans");
 
-    let config = git2::Config::open_default().wrap_err("failed to open global git config")?;
-
-    let signature = Signature::now(
-        &config
-            .get_string("user.name")
-            .wrap_err("failed to load user.name from git config")
-            .note("is your git configured correctly")?,
-        &config
-            .get_string("user.email")
-            .wrap_err("failed to load user.name from git config")
-            .note("is your git configured correctly")?,
-    )
-    .wrap_err("failed to create git signature")?;
+    let signature = Signature::now(&args.user_name, &args.user_email)
+        .wrap_err("failed to create git signature")?;
 
     let head = repo.head().wrap_err("failed to get HEAD")?;
 
@@ -214,10 +218,26 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
         .find_remote("origin")
         .wrap_err("failed to find remote `origin`")?;
 
+    let auth_callback: &dyn Fn(&str, Option<&str>, CredentialType) -> Result<Cred, git2::Error> =
+        &|_url, username_from_url, _allowed_types| {
+            let username = args
+                .http_username
+                .as_ref()
+                .map(String::as_str)
+                .or(username_from_url);
+
+            match username {
+                Some(username) => Cred::userpass_plaintext(username, &args.http_password),
+                None => Err(git2::Error::new(
+                    ErrorCode::Auth,
+                    ErrorClass::Callback,
+                    "no username was provided or able to be inferred",
+                )),
+            }
+        };
+
     let mut callbacks = RemoteCallbacks::new();
-    callbacks.credentials(|url, username_from_url, _allowed_types| {
-        Cred::credential_helper(&config, url, username_from_url)
-    });
+    callbacks.credentials(auth_callback);
 
     let mut remote_connection = remote
         .connect_auth(git2::Direction::Push, Some(callbacks), None)
@@ -232,9 +252,7 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
 
     let mut push_options = {
         let mut callbacks = RemoteCallbacks::new();
-        callbacks.credentials(|url, username_from_url, _allowed_types| {
-            Cred::credential_helper(&config, url, username_from_url)
-        });
+        callbacks.credentials(auth_callback);
 
         let mut push_options = PushOptions::new();
         push_options.remote_callbacks(callbacks);

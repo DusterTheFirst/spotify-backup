@@ -1,6 +1,7 @@
 target/
 Dockerfile
 .vscode
+.github
 .env
 .spotify_token_cache.json
 liked_songs.csv

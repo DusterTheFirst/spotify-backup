@@ -5,6 +5,7 @@
         "reauth",
         "refspecs",
         "rspotify",
+        "userpass",
         "webbrowser"
     ],
     "rust-analyzer.cargo.allFeatures": true
