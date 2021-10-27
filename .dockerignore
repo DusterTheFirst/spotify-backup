@@ -1,0 +1,6 @@
+target/
+Dockerfile
+.vscode
+.env
+.spotify_token_cache.json
+liked_songs.csv

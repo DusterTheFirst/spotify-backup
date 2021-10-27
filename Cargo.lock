@@ -1393,7 +1393,7 @@ dependencies = [
 [[package]]
 name = "rspotify"
 version = "0.11.2"
-source = "git+https://github.com/DusterTheFirst/rspotify?branch=patch-1#ebdb89779f58c95fbfae1f4f56c16601f946d731"
+source = "git+https://github.com/ramsayleung/rspotify?rev=b82c1ff3f3128c168acda3b72a30012755a456be#b82c1ff3f3128c168acda3b72a30012755a456be"
 dependencies = [
  "async-stream",
  "async-trait",
@@ -1416,7 +1416,7 @@ dependencies = [
 [[package]]
 name = "rspotify-http"
 version = "0.11.2"
-source = "git+https://github.com/DusterTheFirst/rspotify?branch=patch-1#ebdb89779f58c95fbfae1f4f56c16601f946d731"
+source = "git+https://github.com/ramsayleung/rspotify?rev=b82c1ff3f3128c168acda3b72a30012755a456be#b82c1ff3f3128c168acda3b72a30012755a456be"
 dependencies = [
  "async-trait",
  "log",
@@ -1429,12 +1429,12 @@ dependencies = [
 [[package]]
 name = "rspotify-macros"
 version = "0.11.2"
-source = "git+https://github.com/DusterTheFirst/rspotify?branch=patch-1#ebdb89779f58c95fbfae1f4f56c16601f946d731"
+source = "git+https://github.com/ramsayleung/rspotify?rev=b82c1ff3f3128c168acda3b72a30012755a456be#b82c1ff3f3128c168acda3b72a30012755a456be"
 
 [[package]]
 name = "rspotify-model"
 version = "0.11.2"
-source = "git+https://github.com/DusterTheFirst/rspotify?branch=patch-1#ebdb89779f58c95fbfae1f4f56c16601f946d731"
+source = "git+https://github.com/ramsayleung/rspotify?rev=b82c1ff3f3128c168acda3b72a30012755a456be#b82c1ff3f3128c168acda3b72a30012755a456be"
 dependencies = [
  "chrono",
  "serde",
