@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{env, path::Path};
 
 use argh::FromArgs;
 use async_std::task;
@@ -14,6 +14,7 @@ use rspotify::{
     clients::{BaseClient, OAuthClient},
     scopes, AuthCodeSpotify, Credentials, OAuth,
 };
+use serde::Deserialize;
 use temp_dir::TempDir;
 use time::{macros::format_description, OffsetDateTime};
 use tracing::{debug, info, metadata::LevelFilter, trace};
@@ -40,28 +41,53 @@ struct Arguments {
         default = "\"liked_songs.csv\".into()"
     )]
     filename: String, // TODO: more than just liked songs
-    /// git user.name
-    #[argh(option, short = 'n', long = "name")]
+}
+
+#[derive(Debug, Deserialize)]
+struct GitConfig {
     user_name: String,
-    /// git user.email
-    #[argh(option, short = 'e', long = "email")]
     user_email: String,
-    /// username for authenticating to the repository over http
-    #[argh(option, short = 'u', long = "username")]
-    http_username: Option<String>,
-    /// password for authenticating to the repository over http
-    #[argh(option, short = 'p', long = "password")]
-    http_password: String, // TODO: ssh auth
+}
+
+#[derive(Debug, Deserialize)]
+struct HttpConfig {
+    username: Option<String>,
+    password: String,
 }
 
 fn main() -> color_eyre::Result<()> {
-    let args: Arguments = argh::from_env();
-
     // Setup error reporting
     color_eyre::install()?;
 
     // Load dot-file
     dotenv::dotenv().ok();
+
+    let args: Arguments = argh::from_env();
+
+    // TODO: ssh auth?
+    let git_config: GitConfig = envy::prefixed("GIT_")
+        .from_env()
+        .map_err(|e| match e {
+            envy::Error::MissingValue(name) => envy::Error::Custom(format!(
+                "missing environment variable GIT_{}",
+                name.to_uppercase()
+            )),
+            _ => e,
+        })
+        .wrap_err("failed to load git configuration")
+        .note("did you provide the required environment variables")?;
+
+    let http_config: HttpConfig = envy::prefixed("HTTP_")
+        .from_env()
+        .map_err(|e| match e {
+            envy::Error::MissingValue(name) => envy::Error::Custom(format!(
+                "missing environment variable GIT_{}",
+                name.to_uppercase()
+            )),
+            _ => e,
+        })
+        .wrap_err("failed to load http configuration")
+        .note("did you provide the required environment variables")?;
 
     // Setup logging
     tracing_subscriber::fmt()
@@ -95,10 +121,15 @@ fn main() -> color_eyre::Result<()> {
         },
     );
 
-    task::block_on(start(spotify, args))
+    task::block_on(start(spotify, args, git_config, http_config))
 }
 
-async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Result<()> {
+async fn start(
+    mut spotify: AuthCodeSpotify,
+    args: Arguments,
+    git_config: GitConfig,
+    http_config: HttpConfig,
+) -> color_eyre::Result<()> {
     trace!("Reading token from token cache");
 
     match spotify.read_token_cache(true).await {
@@ -154,7 +185,7 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
 
     trace!("Starting git shenanigans");
 
-    let signature = Signature::now(&args.user_name, &args.user_email)
+    let signature = Signature::now(&git_config.user_name, &git_config.user_email)
         .wrap_err("failed to create git signature")?;
 
     let head = repo.head().wrap_err("failed to get HEAD")?;
@@ -220,14 +251,14 @@ async fn start(mut spotify: AuthCodeSpotify, args: Arguments) -> color_eyre::Res
 
     let auth_callback: &dyn Fn(&str, Option<&str>, CredentialType) -> Result<Cred, git2::Error> =
         &|_url, username_from_url, _allowed_types| {
-            let username = args
-                .http_username
+            let username = http_config
+                .username
                 .as_ref()
                 .map(String::as_str)
                 .or(username_from_url);
 
             match username {
-                Some(username) => Cred::userpass_plaintext(username, &args.http_password),
+                Some(username) => Cred::userpass_plaintext(username, &http_config.password),
                 None => Err(git2::Error::new(
                     ErrorCode::Auth,
                     ErrorClass::Callback,
