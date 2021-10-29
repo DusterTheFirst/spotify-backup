@@ -18,7 +18,7 @@ use serde::Deserialize;
 use temp_dir::TempDir;
 use time::{macros::format_description, OffsetDateTime};
 use tracing::{debug, info, metadata::LevelFilter, trace};
-use tracing_subscriber::{prelude::*, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 use crate::web::OneOffWebServer;
 
