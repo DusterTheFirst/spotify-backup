@@ -18,7 +18,7 @@ use serde::Deserialize;
 use temp_dir::TempDir;
 use time::{macros::format_description, OffsetDateTime};
 use tracing::{debug, info, metadata::LevelFilter, trace};
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{prelude::*, EnvFilter};
 
 use crate::web::OneOffWebServer;
 
@@ -33,6 +33,9 @@ struct Arguments {
     /// the repository to clone
     #[argh(option, short = 'r', long = "repo")]
     repo: String,
+    /// use journald logging over pretty logging
+    #[argh(switch, short = 'j', long = "journald")]
+    journald: bool,
     /// the filename of the csv file
     #[argh(
         option,
@@ -90,15 +93,21 @@ fn main() -> color_eyre::Result<()> {
         .note("did you provide the required environment variables")?;
 
     // Setup logging
-    tracing_subscriber::fmt()
-        .pretty()
-        .with_env_filter(
-            EnvFilter::from_default_env()
-                .add_directive(LevelFilter::INFO.into())
-                .add_directive("rspotify=warn".parse()?)
-                .add_directive(format!("{}=trace", env!("CARGO_CRATE_NAME")).parse()?),
-        )
-        .init();
+    if args.journald {
+        tracing_subscriber::registry()
+            .with(tracing_journald::layer().wrap_err("failed to setup journald logging")?)
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .pretty()
+            .with_env_filter(
+                EnvFilter::from_default_env()
+                    .add_directive(LevelFilter::INFO.into())
+                    .add_directive("rspotify=warn".parse()?)
+                    .add_directive(format!("{}=trace", env!("CARGO_CRATE_NAME")).parse()?),
+            )
+            .init();
+    }
 
     // Load the spotify credentials
     let creds = Credentials::from_env()
@@ -135,6 +144,7 @@ async fn start(
     match spotify.read_token_cache(true).await {
         Ok(Some(token)) => *spotify.get_token().lock().await.unwrap() = Some(token),
         _ => {
+            // FIXME: don't do this, we in a container now
             debug!("Updating credentials");
 
             webbrowser::open(&spotify.get_authorize_url(false)?)?;

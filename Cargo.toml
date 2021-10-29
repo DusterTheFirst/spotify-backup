@@ -29,6 +29,7 @@ serde = { version = "1.0", features = ["derive"] }
 temp-dir = "0.1"
 time = { version = "0.3", features = ["formatting", "macros"] }
 tracing = "0.1"
+tracing-journald = "0.2.0"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 webbrowser = "0.5"
 
