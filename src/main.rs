@@ -33,9 +33,9 @@ struct Arguments {
     /// the repository to clone
     #[argh(option, short = 'r', long = "repo")]
     repo: String,
-    /// use journald logging over pretty logging
-    #[argh(switch, short = 'j', long = "journald")]
-    journald: bool,
+    /// use a simpler logger
+    #[argh(switch, short = 'l', long = "simple-log")]
+    simpler_log: bool,
     /// the filename of the csv file
     #[argh(
         option,
@@ -99,10 +99,11 @@ fn main() -> color_eyre::Result<()> {
             .add_directive("rspotify=warn".parse()?)
             .add_directive(format!("{}=trace", env!("CARGO_CRATE_NAME")).parse()?);
 
-        if args.journald {
-            tracing_subscriber::registry()
-                .with(tracing_journald::layer().wrap_err("failed to setup journald logging")?)
-                .with(env_filter)
+        if args.simpler_log {
+            tracing_subscriber::fmt()
+                .compact()
+                .with_ansi(false)
+                .with_env_filter(env_filter)
                 .init();
         } else {
             tracing_subscriber::fmt()
