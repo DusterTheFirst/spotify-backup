@@ -93,20 +93,23 @@ fn main() -> color_eyre::Result<()> {
         .note("did you provide the required environment variables")?;
 
     // Setup logging
-    if args.journald {
-        tracing_subscriber::registry()
-            .with(tracing_journald::layer().wrap_err("failed to setup journald logging")?)
-            .init();
-    } else {
-        tracing_subscriber::fmt()
-            .pretty()
-            .with_env_filter(
-                EnvFilter::from_default_env()
-                    .add_directive(LevelFilter::INFO.into())
-                    .add_directive("rspotify=warn".parse()?)
-                    .add_directive(format!("{}=trace", env!("CARGO_CRATE_NAME")).parse()?),
-            )
-            .init();
+    {
+        let env_filter = EnvFilter::from_default_env()
+            .add_directive(LevelFilter::INFO.into())
+            .add_directive("rspotify=warn".parse()?)
+            .add_directive(format!("{}=trace", env!("CARGO_CRATE_NAME")).parse()?);
+
+        if args.journald {
+            tracing_subscriber::registry()
+                .with(tracing_journald::layer().wrap_err("failed to setup journald logging")?)
+                .with(env_filter)
+                .init();
+        } else {
+            tracing_subscriber::fmt()
+                .pretty()
+                .with_env_filter(env_filter)
+                .init();
+        }
     }
 
     // Load the spotify credentials
