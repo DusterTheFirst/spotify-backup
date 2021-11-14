@@ -15,22 +15,24 @@ csv = "1.1"
 dotenv = "0.15"
 envy = "0.4"
 flume = "0.10"
-git2 = { version = "0.13", features = [
-    "vendored-openssl",
-    "https",
-], default-features = false }
 hyper = { version = "0.14", features = ["server"] }
 indoc = "1.0"
-rspotify = { version = "0.11", features = [
-    "client-reqwest",
-    "reqwest-rustls-tls",
-], default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 temp-dir = "0.1"
 time = { version = "0.3", features = ["formatting", "macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 webbrowser = "0.5"
+
+[dependencies.git2]
+version = "0.13"
+features = ["vendored-openssl", "https"]
+default-features = false
+
+[dependencies.rspotify]
+version = "0.11"
+features = ["client-reqwest", "reqwest-rustls-tls"]
+default-features = false
 
 [patch.crates-io]
 rspotify = { git = "https://github.com/ramsayleung/rspotify", rev = "b82c1ff3f3128c168acda3b72a30012755a456be" }

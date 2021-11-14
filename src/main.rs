@@ -36,6 +36,9 @@ struct Arguments {
     /// use a simpler logger
     #[argh(switch, short = 'l', long = "simple-log")]
     simpler_log: bool,
+    /// do not push the commit
+    #[argh(switch, short = 'n', long = "no-push")]
+    no_push: bool,
     /// the filename of the csv file
     #[argh(
         option,
@@ -259,17 +262,19 @@ async fn start(
 
     trace!(?csv_file, "File has changed... pushing new commit");
 
+    if args.no_push {
+        debug!(dir = ?temp_dir.path(), "no-push enabled... skipping push");
+        temp_dir.leak();
+        return Ok(());
+    }
+
     let mut remote = repo
         .find_remote("origin")
         .wrap_err("failed to find remote `origin`")?;
 
     let auth_callback: &dyn Fn(&str, Option<&str>, CredentialType) -> Result<Cred, git2::Error> =
         &|_url, username_from_url, _allowed_types| {
-            let username = http_config
-                .username
-                .as_ref()
-                .map(String::as_str)
-                .or(username_from_url);
+            let username = http_config.username.as_deref().or(username_from_url);
 
             match username {
                 Some(username) => Cred::userpass_plaintext(username, &http_config.password),
