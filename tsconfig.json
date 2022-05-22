@@ -39,6 +39,7 @@
         /* ----- Type Checking ----- */
         /* Enable all strict type-checking options. */
         "strict": true,
+        "noFallthroughCasesInSwitch": true,
 
         /* ----- Completeness ----- */
         /* Skip type checking all .d.ts files. */
