@@ -3,13 +3,14 @@ main = "src/index.ts"
 compatibility_date = "2022-05-22"
 
 account_id = "90d15a1372995fa5ca0b476c1addce38"
-workers_dev = false
 usage_model = "bundled"
+workers_dev = false
+route = "spotify-backup.dusterthefirst.com/*"
 
 [triggers]
 crons = ["0 * * * *"]
 
-[env]
+[vars]
 SPOTIFY_CLIENT_ID = "be256626b1c24fc981ca6ed2c29b012f"
 
 [[kv_namespaces]]
