@@ -1,12 +1,11 @@
 import { html_response } from "./render";
 import { h } from "preact";
-import { OAuth, SpotifyClient } from "./spotify";
-import SpotifyWebApi from "spotify-web-api-js";
+import { SpotifyClient } from "./spotify";
 
 export async function fetch_home(spotify: SpotifyClient | null) {
     if (spotify !== null) {
         const is_expired = Date.now() < spotify.oauth.expires_at;
-        const expires_at = new Date(spotify.oauth.expires_at).toLocaleString();
+        const expires_at = new Date(spotify.oauth.expires_at).toUTCString();
 
         const me = await spotify.me();
 
@@ -23,6 +22,7 @@ export async function fetch_home(spotify: SpotifyClient | null) {
                     )}
                     at {expires_at}
                 </div>
+                <div>it is currently {new Date().toUTCString()}</div>
                 <ul>
                     <li>
                         <a href="/auth">re-authenticate</a>

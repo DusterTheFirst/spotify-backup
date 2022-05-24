@@ -5,7 +5,6 @@ import {
     authenticate_spotify,
     de_authenticate_spotify,
     spotify_client,
-    OAuth,
 } from "./spotify";
 
 export default {

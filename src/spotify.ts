@@ -1,4 +1,5 @@
 import { Environment } from "./env";
+import "spotify-web-api-js";
 
 const SPOTIFY_KV_TOKEN = "spotify-token";
 const SPOTIFY_ACCOUNTS = "https://accounts.spotify.com/";
