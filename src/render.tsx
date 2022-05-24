@@ -14,9 +14,25 @@ export function html_response(body: VNode, head?: VNode) {
                             name="viewport"
                             content="width=device-width, initial-scale=1.0"
                         />
+                        <link
+                            rel="shortcut icon"
+                            href="/assets/spotify_178.png"
+                            type="image/png"
+                        />
+                        <link
+                            rel="manifest"
+                            href="/manifest.json"
+                        />
                         {head}
                     </head>
-                    <body>{body}</body>
+                    <body>
+                        <main>{body}</main>
+                        <footer>
+                            <a href="javascript:window.location.reload()">
+                                refresh
+                            </a>
+                        </footer>
+                    </body>
                 </html>
             ),
         {

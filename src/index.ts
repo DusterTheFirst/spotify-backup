@@ -6,6 +6,7 @@ import {
     de_authenticate_spotify,
     spotify_client,
 } from "./spotify";
+import manifest from "./manifest.json";
 
 export default {
     async fetch(
@@ -23,13 +24,30 @@ export default {
         let spotify = await spotify_client(env);
 
         if (request.method === "GET") {
+            if (url.pathname.startsWith("/assets/")) {
+                let response = await fetch(
+                    `https://dusterthefirst.github.io/spotify-backup/${url.pathname.replace(
+                        "/assets/",
+                        ""
+                    )}`
+                );
+
+                if (response.status === 404) {
+                    return new Response("asset not found", { status: 404 });
+                } else {
+                    return response;
+                }
+            }
+
             switch (url.pathname) {
                 case "/":
-                    return await fetch_home(spotify);
+                    return fetch_home(spotify);
                 case "/auth":
-                    return await authenticate_spotify(env, url.searchParams);
+                    return authenticate_spotify(env, url.searchParams);
                 case "/de-auth":
-                    return await de_authenticate_spotify(env);
+                    return de_authenticate_spotify(env);
+                case "/manifest.json":
+                    return new Response(JSON.stringify(manifest));
                 default:
                     return new Response("route not found", { status: 404 });
             }

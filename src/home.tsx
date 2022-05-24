@@ -1,5 +1,5 @@
 import { html_response } from "./render";
-import { h } from "preact";
+import { h, Fragment } from "preact";
 import { SpotifyClient } from "./spotify";
 
 export async function fetch_home(spotify: SpotifyClient | null) {
@@ -10,7 +10,7 @@ export async function fetch_home(spotify: SpotifyClient | null) {
         const me = await spotify.me();
 
         return html_response(
-            <section>
+            <>
                 <h1 style={{ color: "green" }}>user authenticated</h1>
                 <div>as {me.display_name}</div>
                 <div>
@@ -43,7 +43,7 @@ export async function fetch_home(spotify: SpotifyClient | null) {
                         <pre>{JSON.stringify(spotify.oauth, undefined, 4)}</pre>
                     </code>
                 </details>
-            </section>
+            </>
         );
     }
 

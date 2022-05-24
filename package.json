@@ -3,8 +3,8 @@
     "version": "0.0.0",
     "private": true,
     "scripts": {
-        "start": "flareact dev",
-        "publish": "flareact publish"
+        "start": "wrangler dev",
+        "publish": "wrangler publish"
     },
     "dependencies": {
         "octokit": "^1.7.1",
