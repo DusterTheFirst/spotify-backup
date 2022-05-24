@@ -7,7 +7,7 @@ usage_model = "bundled"
 workers_dev = false
 # route = { pattern = "spotify-backup.dusterthefirst.com/*", zone_id = "c3c0473cff588d953e94751745d61334" }
 
-minify = true
+# minify = true
 
 [triggers]
 crons = ["0 * * * *"]
