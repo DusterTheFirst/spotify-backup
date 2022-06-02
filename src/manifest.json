@@ -4,9 +4,12 @@
     "theme_color": "#121212",
     "name": "Spotify backup control panel",
     "short_name": "Spotify backup",
-    "display": "standalone",
-    "start_url": "/",
     "description": "Web panel to configure spotify backup",
+    "display": "standalone",
+    "scope": "/",
+    "start_url": "/",
+    "lang": "en-US",
+    "orientation": "portrait-primary",
     "icons": [
         {
             "sizes": "709x709",
@@ -22,6 +25,13 @@
             "sizes": "178x178",
             "type": "image/png",
             "src": "/assets/spotify_178.png"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Log Out",
+            "description": "Log out of the system",
+            "url": "/de-auth"
         }
     ]
 }
