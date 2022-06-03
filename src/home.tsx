@@ -1,18 +1,20 @@
 import { html_response } from "./render";
 import { h, Fragment } from "preact";
-import { SpotifyClient } from "./spotify";
+import SpotifyClient from "./spotify";
 
 export async function fetch_home(spotify: SpotifyClient | null) {
     if (spotify !== null) {
-        const is_expired = Date.now() < spotify.oauth.expires_at;
-        const expires_at = new Date(spotify.oauth.expires_at).toUTCString();
+        const is_expired = spotify.oauth.expired();
+        const expires_at = new Date(
+            spotify.oauth.storage.expires_at
+        ).toUTCString();
 
         const me = await spotify.me();
 
         return html_response(
             <>
                 <h1 style={{ color: "green" }}>user authenticated</h1>
-                <div>as {me.display_name}</div>
+                <div>as {me?.display_name}</div>
                 <div>
                     token
                     {is_expired ? (

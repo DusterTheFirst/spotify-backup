@@ -1,10 +1,10 @@
 import octokit from "octokit";
 import { Environment, is_environment } from "./env";
 import { fetch_home } from "./home";
-import {
+import SpotifyClient, {
     authenticate_spotify,
     de_authenticate_spotify,
-    spotify_client,
+    
 } from "./spotify";
 import manifest from "./manifest.json";
 
@@ -19,9 +19,9 @@ export default {
             return new Response("misconfigured worker", { status: 500 });
         }
 
-        let url = new URL(request.url);
+        const url = new URL(request.url);
 
-        let spotify = await spotify_client(env);
+        const spotify = await SpotifyClient.from_env(env);
 
         if (request.method === "GET") {
             if (url.pathname.startsWith("/assets/")) {
@@ -43,9 +43,9 @@ export default {
                 case "/":
                     return fetch_home(spotify);
                 case "/auth":
-                    return authenticate_spotify(env, url.searchParams);
+                    return authenticate_spotify(env, ctx, url.searchParams);
                 case "/de-auth":
-                    return de_authenticate_spotify(env);
+                    return de_authenticate_spotify(env, ctx);
                 case "/manifest.json":
                     return new Response(JSON.stringify(manifest));
                 default:
@@ -65,7 +65,7 @@ export default {
             return;
         }
 
-        let spotify = await spotify_client(env);
+        const spotify = await SpotifyClient.from_env(env);
 
         if (spotify === null) {
             console.warn("spotify not authenticated :(");

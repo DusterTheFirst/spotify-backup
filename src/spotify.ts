@@ -2,21 +2,101 @@ import { Environment } from "./env";
 import "spotify-web-api-js";
 
 const SPOTIFY_KV_TOKEN = "spotify-token";
-const SPOTIFY_ACCOUNTS = "https://accounts.spotify.com/";
+const SPOTIFY_ACCOUNTS = "https://accounts.spotify.com";
 
-export interface OAuthBase {
+const SPOTIFY_TOKEN_URL = `${SPOTIFY_ACCOUNTS}/api/token`;
+const SPOTIFY_AUTH_URL = `${SPOTIFY_ACCOUNTS}/authorize`;
+
+interface OAuthResponse {
     readonly access_token: string;
     readonly token_type: "Bearer";
     readonly refresh_token: string;
     readonly scope: string;
-}
-
-export interface OAuthResponse extends OAuthBase {
     readonly expires_in: number;
 }
 
-export interface OAuth extends OAuthBase {
+interface RefreshOAuth extends Omit<OAuthResponse, "refresh_token"> {}
+
+interface StorageOAuth extends Omit<OAuthResponse, "expires_in"> {
     readonly expires_at: number;
+}
+
+class OAuth {
+    readonly storage!: StorageOAuth;
+
+    private constructor(oauth: StorageOAuth) {
+        this.storage = oauth;
+    }
+
+    public static from_response(response: OAuthResponse): OAuth {
+        return new OAuth({
+            ...response,
+            expires_at: Date.now() + response.expires_in * 1000,
+        });
+    }
+
+    public static async from_persistance(
+        env: Environment
+    ): Promise<OAuth | null> {
+        const persistance = await env.SPOTIFY_BACKUP_KV.get<StorageOAuth>(
+            SPOTIFY_KV_TOKEN,
+            "json"
+        );
+
+        if (persistance === null) {
+            return null;
+        }
+
+        return new OAuth(persistance);
+    }
+
+    public async persist(env: Environment) {
+        await env.SPOTIFY_BACKUP_KV.put(
+            SPOTIFY_KV_TOKEN,
+            JSON.stringify(this.storage)
+        );
+    }
+
+    public static async remove(env: Environment) {
+        await env.SPOTIFY_BACKUP_KV.delete(SPOTIFY_KV_TOKEN);
+    }
+
+    public expired() {
+        return this.storage.expires_at < Date.now();
+    }
+
+    public async refresh(env: Environment): Promise<OAuth | null> {
+        const response = await fetch(SPOTIFY_TOKEN_URL, {
+            method: "POST",
+            body: new URLSearchParams({
+                grant_type: "refresh_token",
+                refresh_token: this.storage.refresh_token,
+            }),
+            headers: {
+                Authorization: `Basic ${btoa(
+                    `${env.SPOTIFY_CLIENT_ID}:${env.SPOTIFY_CLIENT_SECRET}`
+                )}`,
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+        });
+
+        if (!response.ok) {
+            console.error(
+                "failed to refresh access token",
+                response.status,
+                response.statusText
+            );
+
+            return null;
+        }
+
+        const json: RefreshOAuth = await response.json();
+
+        return OAuth.from_response({
+            refresh_token: this.storage.refresh_token,
+            ...json,
+        });
+    }
 }
 
 function get_origin(env: Environment) {
@@ -32,8 +112,7 @@ function get_redirect(env: Environment) {
 }
 
 export function create_authentication_url(env: Environment): URL {
-    let auth_url = new URL(SPOTIFY_ACCOUNTS);
-    auth_url.pathname = "/authorize";
+    let auth_url = new URL(SPOTIFY_AUTH_URL);
     auth_url.searchParams.append("client_id", env.SPOTIFY_CLIENT_ID);
     auth_url.searchParams.append("response_type", "code");
     auth_url.searchParams.append("redirect_uri", get_redirect(env));
@@ -47,11 +126,12 @@ export function create_authentication_url(env: Environment): URL {
 
 export async function authenticate_spotify(
     env: Environment,
+    ctx: ExecutionContext,
     searchParams: URLSearchParams
 ): Promise<Response> {
     // let auth_state = searchParams.get("state"); // TODO:
 
-    let auth_error = searchParams.get("error");
+    const auth_error = searchParams.get("error");
 
     if (auth_error !== null) {
         return new Response(`encountered an error: ${auth_error}`, {
@@ -59,7 +139,7 @@ export async function authenticate_spotify(
         });
     }
 
-    let auth_code = searchParams.get("code");
+    const auth_code = searchParams.get("code");
 
     if (auth_code === null) {
         return Response.redirect(
@@ -68,9 +148,7 @@ export async function authenticate_spotify(
         );
     }
 
-    let token_url = new URL(SPOTIFY_ACCOUNTS);
-    token_url.pathname = "/api/token";
-    let response = await fetch(token_url.toString(), {
+    const response = await fetch(SPOTIFY_TOKEN_URL, {
         method: "POST",
         body: new URLSearchParams({
             grant_type: "authorization_code",
@@ -98,64 +176,90 @@ export async function authenticate_spotify(
         );
     }
 
-    let json: OAuthResponse = await response.json();
-
-    let oauth: OAuth = {
-        expires_at: Date.now() + json.expires_in * 1000,
-        access_token: json.access_token,
-        refresh_token: json.refresh_token,
-        scope: json.scope,
-        token_type: json.token_type,
-    };
-
-    await env.SPOTIFY_BACKUP_KV.put(SPOTIFY_KV_TOKEN, JSON.stringify(oauth));
+    const oauth = OAuth.from_response(await response.json<OAuthResponse>());
+    ctx.waitUntil(oauth.persist(env));
 
     return Response.redirect(get_origin(env), 307);
 }
 
-export async function de_authenticate_spotify(env: Environment) {
-    await env.SPOTIFY_BACKUP_KV.delete(SPOTIFY_KV_TOKEN);
+export async function de_authenticate_spotify(env: Environment, ctx: ExecutionContext) {
+    ctx.waitUntil(OAuth.remove(env));
 
     return Response.redirect(get_origin(env), 307);
 }
 
-export async function spotify_client(
-    env: Environment
-): Promise<SpotifyClient | null> {
-    let spotify_oauth = await env.SPOTIFY_BACKUP_KV.get<OAuth>(
-        SPOTIFY_KV_TOKEN,
-        "json"
-    );
+export default class SpotifyClient {
+    private _oauth!: OAuth;
+    private env: Environment;
 
-    if (spotify_oauth === null) {
-        return null;
+    private async set_oauth(oauth: OAuth) {
+        this._oauth = oauth;
+        this._oauth.persist(this.env);
     }
 
-    // TODO: refresh token
-
-    return new SpotifyClient(spotify_oauth);
-}
-
-export class SpotifyClient {
-    public readonly oauth!: OAuth;
-
-    constructor(oauth: OAuth) {
-        this.oauth = oauth;
+    public get oauth(): OAuth {
+        return this._oauth;
     }
 
-    // TODO: error handle
-    private async fetch<T>(path: string): Promise<T> {
-        return await (
-            await fetch(`https://api.spotify.com/v1${path}`, {
-                headers: {
-                    Authorization: `${this.oauth.token_type} ${this.oauth.access_token}`,
-                    Accept: "application/json",
-                },
-            })
-        ).json();
+    private constructor(oauth: OAuth, env: Environment) {
+        this._oauth = oauth;
+        this.env = env;
     }
 
-    public async me(): Promise<SpotifyApi.CurrentUsersProfileResponse> {
-        return this.fetch("/me");
+    public static async from_env(
+        env: Environment
+    ): Promise<SpotifyClient | null> {
+        const spotify_oauth = await OAuth.from_persistance(env);
+
+        if (spotify_oauth === null) {
+            return null;
+        }
+
+        const client = new SpotifyClient(spotify_oauth, env);
+
+        await client.check_oauth();
+
+        return client;
+    }
+
+    private async check_oauth() {
+        if (this.oauth.expired()) {
+            console.warn("oauth token expired");
+
+            const refreshed_oauth = await this.oauth.refresh(this.env);
+
+            // TODO: distinguish bad refresh vs good refresh
+            if (refreshed_oauth === null) {
+                console.error("failed to refresh oauth token");
+                OAuth.remove(this.env);
+            } else {
+                this.set_oauth(refreshed_oauth);
+            }
+        }
+    }
+
+    private async fetch<T>(path: string): Promise<T | null> {
+        await this.check_oauth();
+
+        const response = await fetch(`https://api.spotify.com/v1${path}`, {
+            headers: {
+                Authorization: `${this.oauth.storage.token_type} ${this.oauth.storage.access_token}`,
+                Accept: "application/json",
+            },
+        });
+
+        const body = await response.json<T>();
+
+        if (!response.ok) {
+            console.error(body);
+            return null;
+            // TODO: error handle
+        }
+
+        return body;
+    }
+
+    public async me() {
+        return this.fetch<SpotifyApi.CurrentUsersProfileResponse>("/me");
     }
 }

@@ -12,19 +12,19 @@
     "orientation": "portrait-primary",
     "icons": [
         {
-            "sizes": "709x709",
+            "sizes": "1024x1024",
             "type": "image/png",
-            "src": "/assets/spotify_709.png"
+            "src": "/assets/spotify_1024.png"
         },
         {
-            "sizes": "355x355",
+            "sizes": "512x512",
             "type": "image/png",
-            "src": "/assets/spotify_355.png"
+            "src": "/assets/spotify_512.png"
         },
         {
-            "sizes": "178x178",
+            "sizes": "192x192",
             "type": "image/png",
-            "src": "/assets/spotify_178.png"
+            "src": "/assets/spotify_192.png"
         }
     ],
     "shortcuts": [

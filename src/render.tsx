@@ -16,7 +16,7 @@ export function html_response(body: VNode, head?: VNode) {
                         />
                         <link
                             rel="shortcut icon"
-                            href="/assets/spotify_178.png"
+                            href="/assets/spotify_192.png"
                             type="image/png"
                         />
                         <link
