@@ -10,17 +10,18 @@ export async function fetch_home(spotify: SpotifyClient | null) {
         ).toUTCString();
 
         const me = await spotify.me();
+        const saved = await spotify.my_saved_tracks();
 
         return html_response(
             <>
                 <h1 style={{ color: "green" }}>user authenticated</h1>
-                <div>as {me?.display_name}</div>
+                <div>as {me?.display_name ?? "ERROR"}</div>
                 <div>
                     token
                     {is_expired ? (
-                        <span style={{ color: "goldenrod" }}> expiring </span>
-                    ) : (
                         <span style={{ color: "red" }}> expired </span>
+                    ) : (
+                        <span style={{ color: "goldenrod" }}> expiring </span>
                     )}
                     at {expires_at}
                 </div>
@@ -43,6 +44,12 @@ export async function fetch_home(spotify: SpotifyClient | null) {
                     <summary>oauth</summary>
                     <code>
                         <pre>{JSON.stringify(spotify.oauth, undefined, 4)}</pre>
+                    </code>
+                </details>
+                <details>
+                    <summary>{saved?.length ?? 0} saved tracks</summary>
+                    <code>
+                        <pre>{JSON.stringify(saved, undefined, 4)}</pre>
                     </code>
                 </details>
             </>

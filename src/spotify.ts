@@ -62,7 +62,7 @@ class OAuth {
     }
 
     public expired() {
-        return this.storage.expires_at < Date.now();
+        return Date.now() > this.storage.expires_at;
     }
 
     public async refresh(env: Environment): Promise<OAuth | null> {
@@ -182,7 +182,10 @@ export async function authenticate_spotify(
     return Response.redirect(get_origin(env), 307);
 }
 
-export async function de_authenticate_spotify(env: Environment, ctx: ExecutionContext) {
+export async function de_authenticate_spotify(
+    env: Environment,
+    ctx: ExecutionContext
+) {
     ctx.waitUntil(OAuth.remove(env));
 
     return Response.redirect(get_origin(env), 307);
@@ -234,6 +237,7 @@ export default class SpotifyClient {
                 OAuth.remove(this.env);
             } else {
                 this.set_oauth(refreshed_oauth);
+                refreshed_oauth.persist(this.env);
             }
         }
     }
@@ -241,7 +245,11 @@ export default class SpotifyClient {
     private async fetch<T>(path: string): Promise<T | null> {
         await this.check_oauth();
 
-        const response = await fetch(`https://api.spotify.com/v1${path}`, {
+        const url = path.startsWith("http")
+            ? path
+            : `https://api.spotify.com/v1${path}`;
+
+        const response = await fetch(url, {
             headers: {
                 Authorization: `${this.oauth.storage.token_type} ${this.oauth.storage.access_token}`,
                 Accept: "application/json",
@@ -261,5 +269,47 @@ export default class SpotifyClient {
 
     public async me() {
         return this.fetch<SpotifyApi.CurrentUsersProfileResponse>("/me");
+    }
+
+    public async my_saved_tracks(): Promise<
+        SpotifyApi.SavedTrackObject[] | null
+    > {
+        let saved_tracks: SpotifyApi.SavedTrackObject[] = [];
+
+        let url = "/me/tracks?limit=50";
+
+        while (url != null) {
+            const response =
+                await this.fetch<SpotifyApi.UsersSavedTracksResponse>(url);
+
+            if (response === null) {
+                return null;
+            }
+
+            // Add the items into the array
+            saved_tracks.push(...response.items);
+
+            url = response.next;
+        }
+
+        return saved_tracks.sort((a, b) => {
+            // Sort by addition date
+            const added_at_cmp =
+                new Date(a.added_at).getTime() - new Date(b.added_at).getTime();
+
+            if (added_at_cmp != 0) {
+                return added_at_cmp;
+            }
+
+            // Fall back if added at same time
+            const track_name_cmp = a.track.name.localeCompare(b.track.name);
+
+            if (track_name_cmp != 0) {
+                return track_name_cmp;
+            }
+
+            // Fall back again if added at same time and same name
+            return a.track.album.name.localeCompare(b.track.album.name);
+        });
     }
 }
