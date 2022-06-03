@@ -4,7 +4,6 @@ import { fetch_home } from "./home";
 import SpotifyClient, {
     authenticate_spotify,
     de_authenticate_spotify,
-    
 } from "./spotify";
 import manifest from "./manifest.json";
 

@@ -292,10 +292,11 @@ export default class SpotifyClient {
             url = response.next;
         }
 
+        // Make absolutely sure that the items are sorted in a deterministic manner
         return saved_tracks.sort((a, b) => {
             // Sort by addition date
             const added_at_cmp =
-                new Date(a.added_at).getTime() - new Date(b.added_at).getTime();
+                new Date(b.added_at).getTime() - new Date(a.added_at).getTime();
 
             if (added_at_cmp != 0) {
                 return added_at_cmp;

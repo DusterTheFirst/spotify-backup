@@ -1,6 +1,7 @@
 import { html_response } from "./render";
 import { h, Fragment } from "preact";
 import SpotifyClient from "./spotify";
+import { tracks_csv } from "./csv";
 
 export async function fetch_home(spotify: SpotifyClient | null) {
     if (spotify !== null) {
@@ -49,7 +50,9 @@ export async function fetch_home(spotify: SpotifyClient | null) {
                 <details>
                     <summary>{saved?.length ?? 0} saved tracks</summary>
                     <code>
-                        <pre>{JSON.stringify(saved, undefined, 4)}</pre>
+                        <pre>
+                            {saved === null ? "none" : tracks_csv(saved)}
+                        </pre>
                     </code>
                 </details>
             </>
