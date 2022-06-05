@@ -7,6 +7,8 @@ import SpotifyClient, {
 import manifest from "./manifest.json";
 import { dry_run, wet_run } from "./backup";
 
+// IMPORTANT TODO: metrics and a way to tell when this starts to fail
+
 export default {
     async fetch(
         request: Request,
