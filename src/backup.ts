@@ -98,7 +98,7 @@ export async function wet_run(spotify: SpotifyClient | null, env: Environment) {
             ...headers,
         },
         body: JSON.stringify({
-            message: `Song update for ${new Date().toDateString()}`,
+            message: `Song update for ${new Date().toDateString()}\n\nThis commit was created automatically with https://github.com/DusterTheFirst/spotify-backup running on Cloudflare Workers`,
             content: btoa(
                 csv_utf8.reduce(
                     (string, char_code, index, array) =>
