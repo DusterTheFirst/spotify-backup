@@ -81,7 +81,7 @@ class OAuth {
         });
 
         if (!response.ok) {
-            console.error(
+            console.log(
                 "failed to refresh access token",
                 response.status,
                 response.statusText
@@ -164,7 +164,7 @@ export async function authenticate_spotify(
     });
 
     if (!response.ok) {
-        console.error(
+        console.log(
             "failed to request access token",
             response.status,
             response.statusText
@@ -227,13 +227,13 @@ export default class SpotifyClient {
 
     private async check_oauth() {
         if (this.oauth.expired()) {
-            console.warn("oauth token expired");
+            console.log("oauth token expired");
 
             const refreshed_oauth = await this.oauth.refresh(this.env);
 
             // TODO: distinguish bad refresh vs good refresh
             if (refreshed_oauth === null) {
-                console.error("failed to refresh oauth token");
+                console.log("failed to refresh oauth token");
                 OAuth.remove(this.env);
             } else {
                 this.set_oauth(refreshed_oauth);
@@ -259,7 +259,7 @@ export default class SpotifyClient {
         const body = await response.json<T>();
 
         if (!response.ok) {
-            console.error(body);
+            console.log(`failed to fetch "${url}"`, body);
             return null;
             // TODO: error handle
         }
@@ -274,23 +274,41 @@ export default class SpotifyClient {
     public async my_saved_tracks(): Promise<
         SpotifyApi.SavedTrackObject[] | null
     > {
-        let saved_tracks: SpotifyApi.SavedTrackObject[] = [];
+        const MAX_LIMIT = 50;
 
-        let url = "/me/tracks?limit=50";
+        const first_response =
+            await this.fetch<SpotifyApi.UsersSavedTracksResponse>(
+                `/me/tracks?limit=${MAX_LIMIT}`
+            );
 
-        while (url != null) {
-            const response =
-                await this.fetch<SpotifyApi.UsersSavedTracksResponse>(url);
-
-            if (response === null) {
-                return null;
-            }
-
-            // Add the items into the array
-            saved_tracks.push(...response.items);
-
-            url = response.next;
+        if (first_response === null) {
+            return null;
         }
+
+        // Calculate the amount of subsequent requests
+        const total_tracks = first_response.total;
+        let request_promises = [];
+
+        for (let start = MAX_LIMIT; start < total_tracks; start += MAX_LIMIT) {
+            request_promises.push(
+                this.fetch<SpotifyApi.UsersSavedTracksResponse>(
+                    `/me/tracks?limit=${MAX_LIMIT}&offset=${start}`
+                )
+            );
+        }
+
+        const request_responses = await Promise.all(request_promises);
+
+        function no_nulls<T>(arr: (T | null)[]): arr is T[] {
+            return !arr.some((response) => response === null);
+        }
+
+        if (!no_nulls(request_responses)) {
+            return null;
+        }
+
+        const saved_tracks: SpotifyApi.SavedTrackObject[] =
+            request_responses.flatMap((response) => response.items);
 
         // Make absolutely sure that the items are sorted in a deterministic manner
         return saved_tracks.sort((a, b) => {

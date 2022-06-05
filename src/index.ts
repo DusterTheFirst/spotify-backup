@@ -14,7 +14,7 @@ export default {
         ctx: ExecutionContext
     ): Promise<Response> {
         if (!is_environment(env)) {
-            console.error("missing expected environment variables", env);
+            console.log("missing expected environment variables", env);
             return new Response("misconfigured worker", { status: 500 });
         }
 
@@ -64,14 +64,14 @@ export default {
         ctx: ExecutionContext
     ): Promise<void> {
         if (!is_environment(env)) {
-            console.error("missing expected environment variables", env);
+            console.log("missing expected environment variables", env);
             return;
         }
 
         const spotify = await SpotifyClient.from_env(env);
 
         if (spotify === null) {
-            console.warn("spotify not authenticated :(");
+            console.log("spotify not authenticated :(");
             return;
         }
 

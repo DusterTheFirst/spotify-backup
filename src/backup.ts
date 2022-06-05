@@ -74,7 +74,7 @@ export async function wet_run(spotify: SpotifyClient | null, env: Environment) {
     >();
 
     if (Array.isArray(content_response)) {
-        console.error(`${config.path} is a directory`);
+        console.log(`${config.path} is a directory`);
         return new Response(`${config.path} is a directory`, { status: 500 });
     }
 
