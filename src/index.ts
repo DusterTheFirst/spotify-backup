@@ -1,4 +1,3 @@
-import octokit from "octokit";
 import { Environment, is_environment } from "./env";
 import { fetch_home } from "./home";
 import SpotifyClient, {
@@ -6,6 +5,7 @@ import SpotifyClient, {
     de_authenticate_spotify,
 } from "./spotify";
 import manifest from "./manifest.json";
+import { dry_run, wet_run } from "./backup";
 
 export default {
     async fetch(
@@ -41,6 +41,10 @@ export default {
             switch (url.pathname) {
                 case "/":
                     return fetch_home(spotify);
+                case "/dry-run":
+                    return dry_run(spotify);
+                case "/wet-run":
+                    return wet_run(spotify, env);
                 case "/auth":
                     return authenticate_spotify(env, ctx, url.searchParams);
                 case "/de-auth":
@@ -70,6 +74,8 @@ export default {
             console.warn("spotify not authenticated :(");
             return;
         }
+
+        await wet_run(spotify, env);
 
         console.log(event);
     },

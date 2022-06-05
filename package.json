@@ -7,7 +7,6 @@
         "publish": "wrangler publish"
     },
     "dependencies": {
-        "octokit": "^1.7.1",
         "preact": "^10.7.2",
         "preact-render-to-string": "^5.2.0",
         "spotify-web-api-js": "^1.5.2"

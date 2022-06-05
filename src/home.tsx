@@ -1,7 +1,6 @@
 import { html_response } from "./render";
 import { h, Fragment } from "preact";
 import SpotifyClient from "./spotify";
-import { tracks_csv } from "./csv";
 
 export async function fetch_home(spotify: SpotifyClient | null) {
     if (spotify !== null) {
@@ -11,7 +10,6 @@ export async function fetch_home(spotify: SpotifyClient | null) {
         ).toUTCString();
 
         const me = await spotify.me();
-        const saved = await spotify.my_saved_tracks();
 
         return html_response(
             <>
@@ -35,6 +33,14 @@ export async function fetch_home(spotify: SpotifyClient | null) {
                         <a href="/de-auth">de-authenticate</a>
                     </li>
                 </ul>
+                <ul>
+                    <li>
+                        <a href="/dry-run">download csv</a>
+                    </li>
+                    <li>
+                        <a href="/wet-run">create commit now</a>
+                    </li>
+                </ul>
                 <details>
                     <summary>user</summary>
                     <code>
@@ -45,14 +51,6 @@ export async function fetch_home(spotify: SpotifyClient | null) {
                     <summary>oauth</summary>
                     <code>
                         <pre>{JSON.stringify(spotify.oauth, undefined, 4)}</pre>
-                    </code>
-                </details>
-                <details>
-                    <summary>{saved?.length ?? 0} saved tracks</summary>
-                    <code>
-                        <pre>
-                            {saved === null ? "none" : tracks_csv(saved)}
-                        </pre>
                     </code>
                 </details>
             </>
