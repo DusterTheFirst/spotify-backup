@@ -301,7 +301,7 @@ export default class SpotifyClient {
         function all_success<T>(
             arr: FetchResult<T>[]
         ): arr is FetchSuccess<T>[] {
-            return !arr.some((response) => response.success);
+            return arr.every((response) => response.success);
         }
 
         if (!all_success(request_responses)) {
