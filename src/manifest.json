@@ -1,9 +1,9 @@
 {
     "$schema": "https://json.schemastore.org/web-manifest-combined.json",
-    "background_color": "#121212",
-    "theme_color": "#121212",
+    "background_color": "#ffffff",
+    "theme_color": "#ffffff",
     "name": "Spotify backup control panel",
-    "short_name": "Spotify backup",
+    "short_name": "Spotify Backup",
     "description": "Web panel to configure spotify backup",
     "display": "standalone",
     "scope": "/",

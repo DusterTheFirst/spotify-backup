@@ -1,43 +1,38 @@
 import { tracks_csv } from "./csv";
-import { Environment } from "./env";
+import { Environment, get_origin } from "./env";
+import server_error from "./pages/error/500";
 import SpotifyClient from "./spotify";
 
-async function get_csv(spotify: SpotifyClient | null) {
+export async function dry_run(spotify: SpotifyClient | null, env: Environment) {
     if (spotify === null) {
-        return new Response("spotify not authorized", {
-            status: 401,
-        });
-    } else {
-        const tracks = await spotify.my_saved_tracks();
-
-        if (tracks === null) {
-            return new Response("unable to get saved tracks", {
-                status: 500,
-            });
-        } else {
-            return tracks_csv(tracks);
-        }
+        return Response.redirect(get_origin(env));
     }
-}
 
-export async function dry_run(spotify: SpotifyClient | null) {
-    const csv = await get_csv(spotify);
+    const tracks = await spotify.my_saved_tracks();
 
-    if (typeof csv === "string") {
-        return new Response(csv, {
-            headers: { "Content-Type": "text/csv" },
-        });
-    } else {
-        return csv;
+    if (!tracks.success) {
+        return server_error("unable to fetch saved tracks", tracks.error);
     }
+
+    const csv = tracks_csv(tracks.data);
+
+    return new Response(csv, {
+        headers: { "Content-Type": "text/csv" },
+    });
 }
 
 export async function wet_run(spotify: SpotifyClient | null, env: Environment) {
-    const csv = await get_csv(spotify);
-
-    if (typeof csv !== "string") {
-        return csv;
+    if (spotify === null) {
+        return Response.redirect(get_origin(env));
     }
+
+    const tracks = await spotify.my_saved_tracks();
+
+    if (!tracks.success) {
+        return server_error("unable to fetch saved tracks", tracks.error);
+    }
+
+    const csv = tracks_csv(tracks.data);
 
     const csv_utf8 = new TextEncoder().encode(csv);
     const config = {
@@ -60,12 +55,11 @@ export async function wet_run(spotify: SpotifyClient | null, env: Environment) {
     });
 
     if (!content_request.ok) {
-        const response = await content_request.text();
-        console.log(
-            `failed to fetch ${config.path}. ${content_request.status}: ${content_request.statusText}; ${response}`
-        );
-
-        return new Response(`failed to fetch ${config.path}`, { status: 500 });
+        return server_error(`failed to fetch ${config.path}`, {
+            status: content_request.status,
+            statusText: content_request.statusText,
+            response: await content_request.text(),
+        });
     }
 
     type ContentResponse = { sha: string; content: string };
@@ -74,8 +68,10 @@ export async function wet_run(spotify: SpotifyClient | null, env: Environment) {
     >();
 
     if (Array.isArray(content_response)) {
-        console.log(`${config.path} is a directory`);
-        return new Response(`${config.path} is a directory`, { status: 500 });
+        return server_error(
+            `${config.path} is a directory`,
+            "received an array of objects, expected only one object"
+        );
     }
 
     const csv_sha = await git_hash(csv_utf8);
@@ -98,7 +94,7 @@ export async function wet_run(spotify: SpotifyClient | null, env: Environment) {
             ...headers,
         },
         body: JSON.stringify({
-            message: `Song update for ${new Date().toDateString()}\n\nThis commit was created automatically with https://github.com/DusterTheFirst/spotify-backup running on Cloudflare Workers`,
+            message: `Song update for ${new Date().toDateString()} @ ${new Date().getUTCHours()}:00 UTC\n\nThis commit was created automatically with https://github.com/DusterTheFirst/spotify-backup running on Cloudflare Workers`,
             content: btoa(
                 csv_utf8.reduce(
                     (string, char_code, index, array) =>
@@ -116,12 +112,11 @@ export async function wet_run(spotify: SpotifyClient | null, env: Environment) {
     });
 
     if (!update_request.ok) {
-        const response = await update_request.text();
-        console.log(
-            `failed to update ${config.path}. ${content_request.status}: ${content_request.statusText}; ${response}`
-        );
-
-        return new Response(`failed to update ${config.path}`, { status: 500 });
+        return server_error(`failed to update ${config.path}`, {
+            response: await update_request.text(),
+            status: update_request.status,
+            statusText: update_request.statusText,
+        });
     }
 
     const update_response = await update_request.json<{

@@ -14,3 +14,11 @@ export function is_environment(env: Partial<Environment>): env is Environment {
         env.GITHUB_ACCESS_TOKEN !== undefined
     );
 }
+
+export function get_origin(env: Environment) {
+    if (env.ENVIRONMENT === "dev") {
+        return "http://localhost:8787";
+    } else {
+        return "https://spotify-backup.dusterthefirst.com";
+    }
+}

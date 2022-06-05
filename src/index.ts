@@ -1,11 +1,14 @@
 import { Environment, is_environment } from "./env";
-import { fetch_home } from "./home";
 import SpotifyClient, {
     authenticate_spotify,
     de_authenticate_spotify,
 } from "./spotify";
 import manifest from "./manifest.json";
-import { dry_run, wet_run } from "./backup";
+import { dry_run, wet_run as real_wet_run } from "./backup";
+import home from "./pages/home";
+import wet_run from "./pages/wet-run";
+import method_not_allowed from "./pages/error/405";
+import not_found from "./pages/error/404";
 
 // IMPORTANT TODO: metrics and a way to tell when this starts to fail
 
@@ -25,6 +28,7 @@ export default {
         const spotify = await SpotifyClient.from_env(env);
 
         if (request.method === "GET") {
+            // Forward assets requests to github pages for static assets
             if (url.pathname.startsWith("/assets/")) {
                 let response = await fetch(
                     `https://dusterthefirst.github.io/spotify-backup/${url.pathname.replace(
@@ -33,31 +37,34 @@ export default {
                     )}`
                 );
 
-                if (response.status === 404) {
-                    return new Response("asset not found", { status: 404 });
-                } else {
+                // If 404, pass on to other handlers
+                if (response.status !== 404) {
                     return response;
                 }
             }
 
             switch (url.pathname) {
                 case "/":
-                    return fetch_home(spotify);
+                    return await home(spotify);
                 case "/dry-run":
-                    return dry_run(spotify);
+                    return dry_run(spotify, env);
                 case "/wet-run":
-                    return wet_run(spotify, env);
+                    return wet_run();
+                case "/wet-run/no-really":
+                    return real_wet_run(spotify, env);
                 case "/auth":
                     return authenticate_spotify(env, ctx, url.searchParams);
                 case "/de-auth":
                     return de_authenticate_spotify(env, ctx);
                 case "/manifest.json":
-                    return new Response(JSON.stringify(manifest));
+                    return new Response(JSON.stringify(manifest), {
+                        headers: { "Content-Type": "application/json" },
+                    });
                 default:
-                    return new Response("route not found", { status: 404 });
+                    return not_found();
             }
         } else {
-            return new Response("unexpected request method", { status: 400 });
+            return method_not_allowed(["GET"]);
         }
     },
     async scheduled(
@@ -77,7 +84,7 @@ export default {
             return;
         }
 
-        await wet_run(spotify, env);
+        await real_wet_run(spotify, env);
 
         console.log(event);
     },

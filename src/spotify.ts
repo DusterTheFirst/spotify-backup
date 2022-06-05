@@ -1,5 +1,7 @@
-import { Environment } from "./env";
+import { Environment, get_origin } from "./env";
 import "spotify-web-api-js";
+import html_response from "./render/response";
+import server_error from "./pages/error/500";
 
 const SPOTIFY_KV_TOKEN = "spotify-token";
 const SPOTIFY_ACCOUNTS = "https://accounts.spotify.com";
@@ -99,13 +101,6 @@ class OAuth {
     }
 }
 
-function get_origin(env: Environment) {
-    if (env.ENVIRONMENT === "dev") {
-        return "http://localhost:8787";
-    } else {
-        return "https://spotify-backup.dusterthefirst.com";
-    }
-}
 
 function get_redirect(env: Environment) {
     return `${get_origin(env)}/auth`;
@@ -134,18 +129,13 @@ export async function authenticate_spotify(
     const auth_error = searchParams.get("error");
 
     if (auth_error !== null) {
-        return new Response(`encountered an error: ${auth_error}`, {
-            status: 400,
-        });
+        return server_error("failed to authenticate with spotify", auth_error);
     }
 
     const auth_code = searchParams.get("code");
 
     if (auth_code === null) {
-        return Response.redirect(
-            create_authentication_url(env).toString(),
-            307
-        );
+        return Response.redirect(create_authentication_url(env).toString());
     }
 
     const response = await fetch(SPOTIFY_TOKEN_URL, {
@@ -170,16 +160,13 @@ export async function authenticate_spotify(
             response.statusText
         );
 
-        return Response.redirect(
-            `${get_origin(env)}/#access_token_failure`,
-            307
-        );
+        return Response.redirect(`${get_origin(env)}/#access_token_failure`);
     }
 
     const oauth = OAuth.from_response(await response.json<OAuthResponse>());
     ctx.waitUntil(oauth.persist(env));
 
-    return Response.redirect(get_origin(env), 307);
+    return Response.redirect(get_origin(env));
 }
 
 export async function de_authenticate_spotify(
@@ -188,7 +175,7 @@ export async function de_authenticate_spotify(
 ) {
     ctx.waitUntil(OAuth.remove(env));
 
-    return Response.redirect(get_origin(env), 307);
+    return Response.redirect(get_origin(env));
 }
 
 export default class SpotifyClient {
@@ -242,7 +229,7 @@ export default class SpotifyClient {
         }
     }
 
-    private async fetch<T>(path: string): Promise<T | null> {
+    private async fetch<T>(path: string): Promise<FetchResult<T>> {
         await this.check_oauth();
 
         const url = path.startsWith("http")
@@ -260,11 +247,21 @@ export default class SpotifyClient {
 
         if (!response.ok) {
             console.log(`failed to fetch "${url}"`, body);
-            return null;
-            // TODO: error handle
+
+            return {
+                success: false,
+                error: {
+                    status: response.status,
+                    statusText: response.statusText,
+                    response: await response.text(),
+                },
+            };
         }
 
-        return body;
+        return {
+            success: true,
+            data: body,
+        };
     }
 
     public async me() {
@@ -272,7 +269,7 @@ export default class SpotifyClient {
     }
 
     public async my_saved_tracks(): Promise<
-        SpotifyApi.SavedTrackObject[] | null
+        FetchResult<SpotifyApi.SavedTrackObject[]>
     > {
         const MAX_LIMIT = 50;
 
@@ -281,13 +278,15 @@ export default class SpotifyClient {
                 `/me/tracks?limit=${MAX_LIMIT}`
             );
 
-        if (first_response === null) {
-            return null;
+        if (!first_response.success) {
+            return first_response;
         }
 
         // Calculate the amount of subsequent requests
-        const total_tracks = first_response.total;
-        let request_promises = [];
+        const total_tracks = first_response.data.total;
+        let request_promises: Promise<
+            FetchResult<SpotifyApi.UsersSavedTracksResponse>
+        >[] = [];
 
         for (let start = MAX_LIMIT; start < total_tracks; start += MAX_LIMIT) {
             request_promises.push(
@@ -299,38 +298,60 @@ export default class SpotifyClient {
 
         const request_responses = await Promise.all(request_promises);
 
-        function no_nulls<T>(arr: (T | null)[]): arr is T[] {
-            return !arr.some((response) => response === null);
+        function all_success<T>(
+            arr: FetchResult<T>[]
+        ): arr is FetchSuccess<T>[] {
+            return !arr.some((response) => response.success);
         }
 
-        if (!no_nulls(request_responses)) {
-            return null;
+        if (!all_success(request_responses)) {
+            return request_responses.find(
+                (response) => !response.success
+            )! as FetchFailure;
         }
 
         // Join the first response and the subsequent responses into an array
-        const saved_tracks = first_response.items.concat(
-            request_responses.flatMap((response) => response.items)
+        const saved_tracks = first_response.data.items.concat(
+            request_responses.flatMap((response) => response.data.items)
         );
 
         // Make absolutely sure that the items are sorted in a deterministic manner
-        return saved_tracks.sort((a, b) => {
-            // Sort by addition date
-            const added_at_cmp =
-                new Date(b.added_at).getTime() - new Date(a.added_at).getTime();
+        return {
+            success: true,
+            data: saved_tracks.sort((a, b) => {
+                // Sort by addition date
+                const added_at_cmp =
+                    new Date(b.added_at).getTime() -
+                    new Date(a.added_at).getTime();
 
-            if (added_at_cmp != 0) {
-                return added_at_cmp;
-            }
+                if (added_at_cmp != 0) {
+                    return added_at_cmp;
+                }
 
-            // Fall back if added at same time
-            const track_name_cmp = a.track.name.localeCompare(b.track.name);
+                // Fall back if added at same time
+                const track_name_cmp = a.track.name.localeCompare(b.track.name);
 
-            if (track_name_cmp != 0) {
-                return track_name_cmp;
-            }
+                if (track_name_cmp != 0) {
+                    return track_name_cmp;
+                }
 
-            // Fall back again if added at same time and same name
-            return a.track.album.name.localeCompare(b.track.album.name);
-        });
+                // Fall back again if added at same time and same name
+                return a.track.album.name.localeCompare(b.track.album.name);
+            }),
+        };
     }
 }
+
+export type FetchFailure = {
+    success: false;
+    error: {
+        status: number;
+        statusText: string;
+        response: string;
+    };
+};
+export type FetchSuccess<T> = {
+    success: true;
+    data: T;
+};
+export type FetchResult<T> = FetchSuccess<T> | FetchFailure;
