@@ -34,12 +34,13 @@ function NotAuthenticated() {
                     <li>
                         <a href="/auth">authenticate</a>
                     </li>
+                    <li>
+                        <a href="javascript:window.location.reload()">
+                            refresh
+                        </a>
+                    </li>
                 </ul>
             </section>
-
-            <footer>
-                <a href="javascript:window.location.reload()">refresh</a>
-            </footer>
         </main>
     );
 }
@@ -71,6 +72,11 @@ function TokenExpired() {
                         <li>
                             <a href="/auth">re-authenticate</a>
                         </li>
+                        <li>
+                            <a href="javascript:window.location.reload()">
+                                refresh
+                            </a>
+                        </li>
                     </ul>
                 </p>
             </section>
@@ -99,6 +105,9 @@ function UserInformation({
                 </li>
                 <li>
                     <a href="/de-auth">de-authenticate</a>
+                </li>
+                <li>
+                    <a href="javascript:window.location.reload()">refresh</a>
                 </li>
             </ul>
             <ul>

@@ -16,6 +16,9 @@ export default function server_error(
             {error !== undefined ?? (
                 <pre>{JSON.stringify(error, undefined, 4)}</pre>
             )}
+            <li>
+                <a href="javascript:window.location.reload()">refresh</a>
+            </li>
         </Error>,
         { status: 500 }
     );
