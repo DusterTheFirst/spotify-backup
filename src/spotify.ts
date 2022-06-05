@@ -307,8 +307,10 @@ export default class SpotifyClient {
             return null;
         }
 
-        const saved_tracks: SpotifyApi.SavedTrackObject[] =
-            request_responses.flatMap((response) => response.items);
+        // Join the first response and the subsequent responses into an array
+        const saved_tracks = first_response.items.concat(
+            request_responses.flatMap((response) => response.items)
+        );
 
         // Make absolutely sure that the items are sorted in a deterministic manner
         return saved_tracks.sort((a, b) => {
