@@ -9,6 +9,7 @@ import home from "./pages/home";
 import wet_run from "./pages/wet-run";
 import method_not_allowed from "./pages/error/405";
 import not_found from "./pages/error/404";
+import push_uptime from "./uptime-kuma";
 
 // IMPORTANT TODO: metrics and a way to tell when this starts to fail
 
@@ -76,6 +77,9 @@ export default {
             console.log("missing expected environment variables", env);
             return;
         }
+
+        // Report worker as up to uptime kuma
+        push_uptime(ctx);
 
         const spotify = await SpotifyClient.from_env(env);
 
