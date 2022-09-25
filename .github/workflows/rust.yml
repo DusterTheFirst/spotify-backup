@@ -1,0 +1,38 @@
+on:
+    push:
+        branches:
+            - fly
+
+name: Rust
+
+jobs:
+    clippy:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: dtolnay/rust-toolchain@stable
+              with:
+                  components: clippy
+
+            - uses: actions/checkout@v2
+
+            - run: cargo clippy --release --all-features
+
+    fmt:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: dtolnay/rust-toolchain@stable
+
+            - uses: actions/checkout@v2
+
+            - run: cargo fmt --check
+
+    deploy:
+        needs: clippy
+        runs-on: ubuntu-latest
+        env:
+            FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        steps:
+            - uses: actions/checkout@v2
+
+            - uses: superfly/flyctl-actions/setup-flyctl@master
+            - run: flyctl deploy --remote-only
