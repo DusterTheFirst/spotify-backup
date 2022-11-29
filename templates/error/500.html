@@ -1,0 +1,10 @@
+{% extends "error.html" %}
+
+{% block status_code %}500{% endblock %}
+{% block status_message %}Internal Server Error{% endblock %}
+
+{% block main %}
+{% if let Some(error_message) = error_message %}
+<pre>{{ error_message }}</pre>
+{% endif %}
+{% endblock %}

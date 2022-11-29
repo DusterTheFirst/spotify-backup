@@ -1,0 +1,9 @@
+{% extends "error.html" %}
+
+{% block status_code %}404{% endblock %}
+{% block status_message %}Page Not Found{% endblock %}
+
+{% block main %}
+<div><code>{{ path }}</code> not found</div>
+{% endblock %}
+

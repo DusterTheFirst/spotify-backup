@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <title>{% block status_code %}{% endblock %} ({% block status_message %}{% endblock %}) - Spotify Backup</title>
+
+        {# Inline all files since we can not assume the server is well-behaving #}
+        <style>
+            html {
+                height: 100vh;
+                width: 100vw;
+                margin: 0;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                align-content: center;
+            }
+
+            body {
+                margin: auto;
+                text-align: center;
+                /* align-content: center; */
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>{% block status_code %}{% endblock %} | {% block status_message %}{% endblock %}</h1>
+        </header>
+        <main>
+            {% block main %}{% endblock %}
+        </main>
+        <nav>
+            <a href="/">return home</a>
+        </nav>
+        <footer>
+            <code>{{ env!("CARGO_PKG_NAME") }} {{ env!("CARGO_PKG_VERSION") }}</code>
+            <code>(commit <a href='https://github.com/dusterthefirst/spotify-backup/tree/{{ git_version!(args = ["--always"]) }}'
+                    target="_blank">{{ git_version!() }}</a>)</code>
+        </footer>
+    </body>
+</html>
