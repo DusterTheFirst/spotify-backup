@@ -1,1 +1,6 @@
 target
+.vscode
+.env
+fly.toml
+LICENSE
+logo.xcf

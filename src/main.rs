@@ -13,7 +13,7 @@ use tower::service_fn;
 use tower_http::{
     catch_panic::CatchPanicLayer, cors::CorsLayer, services::ServeDir, trace::TraceLayer,
 };
-use tracing::{debug, Level, Instrument};
+use tracing::{debug, Instrument, Level};
 use tracing_subscriber::{prelude::*, EnvFilter};
 
 mod routes;
@@ -31,7 +31,7 @@ fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
     #[cfg(debug_assertions)]
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     tracing_subscriber::Registry::default()
         .with(tracing_error::ErrorLayer::default())
