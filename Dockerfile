@@ -24,4 +24,4 @@ COPY --from=builder /app/static /static
 
 ENV STATIC_DIR="/static"
 
-CMD ["/spotify-banger-backend"]
+CMD ["/spotify-backup"]

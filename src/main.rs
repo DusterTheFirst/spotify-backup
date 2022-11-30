@@ -1,9 +1,10 @@
 #![forbid(unsafe_code)]
 #![deny(elided_lifetimes_in_paths)]
 
-use std::{net::SocketAddr, path::PathBuf};
+use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use axum::{
+    http::header::{self},
     routing::{get, get_service},
     Router,
 };
@@ -11,7 +12,8 @@ use color_eyre::eyre::Context;
 use serde::Deserialize;
 use tower::service_fn;
 use tower_http::{
-    catch_panic::CatchPanicLayer, cors::CorsLayer, services::ServeDir, trace::TraceLayer,
+    catch_panic::CatchPanicLayer, cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir,
+    timeout::TimeoutLayer, trace::TraceLayer, ServiceBuilderExt,
 };
 use tracing::{debug, Instrument, Level};
 use tracing_subscriber::{prelude::*, EnvFilter};
@@ -22,6 +24,7 @@ mod templates;
 #[derive(Deserialize)]
 struct Environment {
     bind: SocketAddr,
+    domain: String,
     static_dir: PathBuf,
     spotify_client_id: String,
     spotify_client_secret: String,
@@ -44,19 +47,21 @@ fn main() -> color_eyre::Result<()> {
         }))
         .init();
 
-    let env: Environment =
+    let environment: Environment =
         envy::from_env().wrap_err("failed to load configuration from environment")?;
 
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap()
-        .block_on(async_main(env))
+        .block_on(async_main(environment))
 }
 
-async fn async_main(env: Environment) -> color_eyre::Result<()> {
-    let _rspotify_credentials =
-        rspotify::Credentials::new(&env.spotify_client_id, &env.spotify_client_secret);
+async fn async_main(environment: Environment) -> color_eyre::Result<()> {
+    let rspotify_credentials = rspotify::Credentials::new(
+        &environment.spotify_client_id,
+        &environment.spotify_client_secret,
+    );
 
     let app = Router::new()
         .route("/", get(routes::root))
@@ -72,7 +77,7 @@ async fn async_main(env: Environment) -> color_eyre::Result<()> {
         .nest_service(
             "/static",
             get_service(
-                ServeDir::new(env.static_dir)
+                ServeDir::new(environment.static_dir)
                     .append_index_html_on_directories(false)
                     .fallback(service_fn(
                         routes::error::not_found_service::<std::io::Error>,
@@ -83,15 +88,37 @@ async fn async_main(env: Environment) -> color_eyre::Result<()> {
         .fallback(routes::error::not_found)
         .layer(
             tower::ServiceBuilder::new()
+                .sensitive_headers([header::AUTHORIZATION, header::COOKIE])
+                .set_x_request_id(MakeRequestUuid) // TODO: USE
+                .propagate_x_request_id()
+                .layer(TraceLayer::new_for_http()) // TODO: configure
+                .layer(TimeoutLayer::new(Duration::from_secs(10)))
+                .map_response_body(axum::body::boxed)
+                .compression()
+                // .layer( TODO: redirect to environment.domain
+                //     FilterLayer::new(|req: Request<Body>| {
+                //         req.uri()
+                //             .authority()
+                //             .map(|auth| auth.as_str())
+                //             .eq(&Some(&environment.domain))
+                //             .then_some(req)
+                //             .ok_or(req)
+                //     })
+                //     .layer(Redirect::<BoxBody>::permanent(
+                //         environment
+                //             .domain
+                //             .parse()
+                //             .expect("domain should be a valid uri"),
+                //     )),
+                // )
                 .layer(CatchPanicLayer::custom(
                     routes::error::internal_server_error_panic,
                 ))
-                .layer(TraceLayer::new_for_http())
-                .layer(CorsLayer::permissive()),
+                .layer(CorsLayer::permissive()), // TODO: less permissive
         );
 
-    debug!(?env.bind, "started http server");
-    axum::Server::bind(&env.bind)
+    debug!(?environment.bind, "started http server");
+    axum::Server::bind(&environment.bind)
         .serve(app.into_make_service())
         .await
         .wrap_err("failed to bind to given address")

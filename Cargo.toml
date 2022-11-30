@@ -25,8 +25,8 @@ rspotify = { version = "^0.11", default-features = false, features = ["client-re
 serde = { version = "^1.0", features = ["derive"] }
 sqlx = { version = "^0.6", features = ["runtime-tokio-rustls", "sqlite"] }
 tokio = { version = "^1.21", features = ["full", "tracing"] }
-tower = "^0.4"
-tower-http = { version = "^0.3", features = ["catch-panic", "cors", "fs", "trace"] }
+tower = { version = "^0.4", features = ["filter", "limit"] }
+tower-http = { version = "0.3.4", features = ["catch-panic", "cors", "fs", "redirect", "request-id", "sensitive-headers", "timeout", "trace", "compression-br"] }
 tracing = "^0.1"
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "^0.3", features = ["env-filter"] }

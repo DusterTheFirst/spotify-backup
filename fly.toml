@@ -8,6 +8,9 @@ BIND = "0.0.0.0:8080"
 DOMAIN = "backup.spotify.dusterthefirst.com"
 SPOTIFY_CLIENT_ID = "be256626b1c24fc981ca6ed2c29b012f"
 
+[deploy]
+strategy = "canary"
+
 [[services]]
 internal_port = 8080
 protocol = "tcp"
