@@ -39,6 +39,7 @@
             <code>{{ env!("CARGO_PKG_NAME") }} {{ env!("CARGO_PKG_VERSION") }}</code>
             <code>(commit <a href='https://github.com/dusterthefirst/spotify-backup/tree/{{ git_version!(args = ["--always"]) }}'
                     target="_blank">{{ git_version!() }}</a>)</code>
+            <span>Request ID: <code>{{ request_id.header_value().to_str().expect("x-request-id should be valid utf-8") }}</code></span>
         </footer>
     </body>
 </html>

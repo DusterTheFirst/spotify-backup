@@ -4,7 +4,7 @@
 use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use axum::{
-    http::header::{self},
+    http::{header, uri::Authority},
     routing::{get, get_service},
     Router,
 };
@@ -12,19 +12,22 @@ use color_eyre::eyre::Context;
 use serde::Deserialize;
 use tower::service_fn;
 use tower_http::{
-    catch_panic::CatchPanicLayer, cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir,
-    timeout::TimeoutLayer, trace::TraceLayer, ServiceBuilderExt,
+    cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir, timeout::TimeoutLayer,
+    trace::TraceLayer, ServiceBuilderExt,
 };
 use tracing::{debug, Instrument, Level};
 use tracing_subscriber::{prelude::*, EnvFilter};
 
+use crate::middleware::catch_panic;
+
+mod middleware;
 mod routes;
 mod templates;
 
 #[derive(Deserialize)]
 struct Environment {
     bind: SocketAddr,
-    domain: String,
+    host: String,
     static_dir: PathBuf,
     spotify_client_id: String,
     spotify_client_secret: String,
@@ -63,6 +66,9 @@ async fn async_main(environment: Environment) -> color_eyre::Result<()> {
         &environment.spotify_client_secret,
     );
 
+    let host = Authority::from_maybe_shared(environment.host)
+        .expect("DOMAIN should be a valid URI authority");
+
     let app = Router::new()
         .route("/", get(routes::root))
         .route("/api/auth", get(routes::api::auth))
@@ -88,33 +94,37 @@ async fn async_main(environment: Environment) -> color_eyre::Result<()> {
         .fallback(routes::error::not_found)
         .layer(
             tower::ServiceBuilder::new()
+                // Hide sensitive headers
                 .sensitive_headers([header::AUTHORIZATION, header::COOKIE])
-                .set_x_request_id(MakeRequestUuid) // TODO: USE
+                // Give a unique identifier to every request
                 .propagate_x_request_id()
+                .set_x_request_id(MakeRequestUuid) // TODO: USE
+                // Catch Panics in handlers
+                .layer(axum::middleware::from_fn(catch_panic))
+                // Trace requests and responses
                 .layer(TraceLayer::new_for_http()) // TODO: configure
+                // Timeout if request or response hangs
                 .layer(TimeoutLayer::new(Duration::from_secs(10)))
+                // Compress responses
                 .map_response_body(axum::body::boxed)
                 .compression()
-                // .layer( TODO: redirect to environment.domain
-                //     FilterLayer::new(|req: Request<Body>| {
-                //         req.uri()
-                //             .authority()
-                //             .map(|auth| auth.as_str())
-                //             .eq(&Some(&environment.domain))
-                //             .then_some(req)
-                //             .ok_or(req)
-                //     })
-                //     .layer(Redirect::<BoxBody>::permanent(
-                //         environment
-                //             .domain
-                //             .parse()
-                //             .expect("domain should be a valid uri"),
-                //     )),
-                // )
-                .layer(CatchPanicLayer::custom(
-                    routes::error::internal_server_error_panic,
-                ))
-                .layer(CorsLayer::permissive()), // TODO: less permissive
+                // Send CORS headers
+                // TODO: less restrictive
+                .layer(
+                    CorsLayer::new()
+                        .allow_credentials(false)
+                        .allow_headers([])
+                        .allow_methods([])
+                        .allow_origin([host
+                            .as_str()
+                            .parse()
+                            .expect("HOST should be a valid HeaderValue")]),
+                )
+                // Redirect requests that are not to the configured domain
+                .layer(axum::middleware::from_fn_with_state(
+                    host,
+                    middleware::redirect_to_domain,
+                )),
         );
 
     debug!(?environment.bind, "started http server");
