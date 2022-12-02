@@ -66,7 +66,6 @@ pub async fn catch_panic(
         Err(panic_err) => panic_err,
     };
 
-
     // TODO: allow config I guess
     internal_server_error_panic(request_id, panic_err)
 }
