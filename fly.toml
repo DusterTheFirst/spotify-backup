@@ -44,3 +44,6 @@ protocol = "http"
 restart_limit = 0
 timeout = "2s"
 tls_skip_verify = false
+
+[services.http_checks.headers]
+x-forwarded-host = "backup.spotify.dusterthefirst.com"

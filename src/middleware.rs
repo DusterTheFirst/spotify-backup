@@ -67,5 +67,6 @@ pub async fn catch_panic(
     };
 
     // TODO: allow config I guess
+    // TODO: https://stackoverflow.com/questions/69593235/how-to-get-panic-information-i-e-stack-trace-with-catch-unwind
     internal_server_error_panic(request_id, panic_err)
 }

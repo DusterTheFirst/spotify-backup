@@ -4,14 +4,15 @@ use axum::{
     body::Body,
     http::{Request, Uri},
     response::Response,
+    Extension,
 };
 use tower_http::request_id::RequestId;
 use tracing::error;
 
 use crate::templates::error::{InternalServerError, NotFound};
 
-pub async fn not_found(id: axum::extract::Extension<RequestId>, uri: Uri) -> Response {
-    NotFound::response(uri.path(), id.0)
+pub async fn not_found(Extension(id): Extension<RequestId>, uri: Uri) -> Response {
+    NotFound::response(uri.path(), id)
 }
 
 pub async fn not_found_service<E>(req: Request<Body>) -> Result<Response, E> {
@@ -25,12 +26,12 @@ pub async fn not_found_service<E>(req: Request<Body>) -> Result<Response, E> {
 }
 
 pub async fn internal_server_error<E: std::error::Error>(
-    id: axum::extract::Extension<RequestId>,
+    Extension(id): Extension<RequestId>,
     error: E,
 ) -> Response {
     error!(%error, "ServeDir encountered IO error"); // FIXME:
 
-    InternalServerError::response(error.to_string(), id.0)
+    InternalServerError::response(error.to_string(), id)
 }
 
 pub fn internal_server_error_panic(
