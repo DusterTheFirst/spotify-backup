@@ -1,3 +1,7 @@
+use std::error::Error;
+
+use crate::middleware::catch_panic::CaughtPanic;
+
 use super::into_response;
 
 use askama::Template;
@@ -28,23 +32,65 @@ impl<'s> NotFound<'s> {
 #[derive(Template, Debug)]
 #[template(path = "error/500.html")]
 pub struct InternalServerError {
-    error_message: Option<String>,
+    details: Option<InternalServerErrorDetails>,
     request_id: RequestId,
 }
 
+#[derive(Debug)]
+enum InternalServerErrorDetails {
+    Error(InternalServerErrorError),
+    Panic(InternalServerErrorPanic),
+}
+
+#[derive(Template, Debug)]
+#[template(path = "error/500-error.html")]
+struct InternalServerErrorError {
+    error_message: String,
+    source: Vec<String>,
+}
+
+#[derive(Template, Debug)]
+#[template(path = "error/500-panic.html")]
+struct InternalServerErrorPanic {
+    panic: CaughtPanic,
+}
+
+fn error_sources(error: &dyn Error) -> Vec<String> {
+    if let Some(source) = error.source() {
+        let mut sources = error_sources(source);
+        sources.push(source.to_string());
+        return sources;
+    }
+
+    vec![]
+}
+
 impl InternalServerError {
-    pub fn response(error_message: impl Into<String>, request_id: RequestId) -> Response {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            into_response(InternalServerError {
-                error_message: if cfg!(debug_assertions) {
-                    Some(error_message.into())
-                } else {
-                    None
+    pub fn from_error(error: &dyn Error, request_id: RequestId) -> Self {
+        InternalServerError {
+            details: cfg!(debug_assertions).then_some(InternalServerErrorDetails::Error(
+                InternalServerErrorError {
+                    error_message: error.to_string(),
+                    source: error_sources(&error),
                 },
-                request_id,
-            }),
-        )
-            .into_response()
+            )),
+
+            request_id,
+        }
+    }
+
+    pub fn from_panic(request_id: RequestId, panic_info: CaughtPanic) -> Self {
+        InternalServerError {
+            details: cfg!(debug_assertions).then_some(InternalServerErrorDetails::Panic(
+                InternalServerErrorPanic { panic: panic_info },
+            )),
+            request_id,
+        }
+    }
+}
+
+impl IntoResponse for InternalServerError {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, into_response(self)).into_response()
     }
 }

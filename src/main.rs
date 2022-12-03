@@ -18,7 +18,7 @@ use tower_http::{
 use tracing::{debug, Instrument, Level};
 use tracing_subscriber::{prelude::*, EnvFilter};
 
-use crate::middleware::catch_panic;
+use crate::middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};
 
 mod middleware;
 mod routes;
@@ -41,13 +41,8 @@ fn main() -> color_eyre::Result<()> {
 
     tracing_subscriber::Registry::default()
         .with(tracing_error::ErrorLayer::default())
-        .with(tracing_subscriber::fmt::layer())
-        .with(EnvFilter::try_from_default_env().unwrap_or_else(|_error| {
-            EnvFilter::default()
-                .add_directive(Level::INFO.into())
-                .add_directive("tower_http=trace".parse().unwrap())
-                .add_directive("spotify_backup=trace".parse().unwrap())
-        }))
+        .with(tracing_subscriber::fmt::layer().pretty())
+        .with(EnvFilter::from_default_env())
         .init();
 
     let environment: Environment =
@@ -86,7 +81,7 @@ async fn async_main(environment: Environment) -> color_eyre::Result<()> {
                 ServeDir::new(environment.static_dir)
                     .append_index_html_on_directories(false)
                     .fallback(service_fn(
-                        routes::error::not_found_service::<std::io::Error>,
+                        routes::error::static_not_found::<std::io::Error>,
                     )),
             )
             .handle_error(routes::error::internal_server_error),
@@ -100,9 +95,11 @@ async fn async_main(environment: Environment) -> color_eyre::Result<()> {
                 .propagate_x_request_id()
                 .set_x_request_id(MakeRequestUuid) // TODO: USE
                 // Catch Panics in handlers
-                .layer(axum::middleware::from_fn(catch_panic))
+                .layer(catch_panic_layer(
+                    routes::error::internal_server_error_panic,
+                ))
                 // Trace requests and responses
-                .layer(TraceLayer::new_for_http()) // TODO: configure
+                .layer(TraceLayer::new_for_http().make_span_with(SpanMaker)) // TODO: configure
                 // Timeout if request or response hangs
                 .layer(TimeoutLayer::new(Duration::from_secs(10)))
                 // Compress responses

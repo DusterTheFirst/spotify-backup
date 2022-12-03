@@ -1,23 +1,24 @@
-use std::any::Any;
-
 use axum::{
     body::Body,
     http::{Request, Uri},
-    response::Response,
+    response::{IntoResponse, Response},
     Extension,
 };
 use tower_http::request_id::RequestId;
 use tracing::error;
 
-use crate::templates::error::{InternalServerError, NotFound};
+use crate::{
+    middleware::catch_panic::CaughtPanic,
+    templates::error::{InternalServerError, NotFound},
+};
 
 pub async fn not_found(Extension(id): Extension<RequestId>, uri: Uri) -> Response {
     NotFound::response(uri.path(), id)
 }
 
-pub async fn not_found_service<E>(req: Request<Body>) -> Result<Response, E> {
+pub async fn static_not_found<E>(req: Request<Body>) -> Result<Response, E> {
     Ok(NotFound::response(
-        req.uri().path(),
+        &format!("/static{}", req.uri().path()),
         req.extensions()
             .get::<RequestId>()
             .expect("x-header-id should be set")
@@ -25,32 +26,23 @@ pub async fn not_found_service<E>(req: Request<Body>) -> Result<Response, E> {
     ))
 }
 
+#[tracing::instrument]
 pub async fn internal_server_error<E: std::error::Error>(
     Extension(id): Extension<RequestId>,
     error: E,
 ) -> Response {
     error!(%error, "ServeDir encountered IO error"); // FIXME:
 
-    InternalServerError::response(error.to_string(), id)
+    InternalServerError::from_error(&error, id).into_response()
 }
 
-pub fn internal_server_error_panic(
-    request_id: RequestId,
-    panic: Box<dyn Any + Send + 'static>,
-) -> Response {
-    let details = if let Some(s) = panic.downcast_ref::<String>() {
-        tracing::error!("Service panicked: {}", s);
-
-        s.as_str()
-    } else if let Some(s) = panic.downcast_ref::<&str>() {
-        tracing::error!("Service panicked: {}", s);
-
-        s
+#[tracing::instrument(skip(info))]
+pub fn internal_server_error_panic(request_id: RequestId, info: CaughtPanic) -> Response {
+    if let Some(message) = info.payload_str() {
+        error!(%message, "Service panicked");
     } else {
-        tracing::error!("Service panicked but panic info was not a &str or String");
+        error!("Service panicked but panic info was not a &str or String");
+    }
 
-        "Unknown panic message"
-    };
-
-    InternalServerError::response(format!("PANIC: {details}"), request_id)
+    InternalServerError::from_panic(request_id, info).into_response()
 }

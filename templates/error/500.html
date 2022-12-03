@@ -4,7 +4,14 @@
 {% block status_message %}Internal Server Error{% endblock %}
 
 {% block main %}
-{% if let Some(error_message) = error_message %}
-<pre>{{ error_message }}</pre>
+{# Only show details if they exist #}
+{% if let Some(details) = details %}
+{# Render the corresponding template #}
+{% match details %}
+{% when InternalServerErrorDetails::Error with (error) %}
+{{ error|safe }}
+{% when InternalServerErrorDetails::Panic with (panic) %}
+{{ panic|safe }}
+{% endmatch %}
 {% endif %}
 {% endblock %}

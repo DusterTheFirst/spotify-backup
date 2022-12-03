@@ -69,51 +69,35 @@ checksum = "983cd8b9d4b02a6dc6ffa557262eb5858a27a0038ffffe21a0f133eaa819a164"
 
 [[package]]
 name = "askama"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb98f10f371286b177db5eeb9a6e5396609555686a35e1d4f7b9a9c6d8af0139"
+version = "0.11.2"
+source = "git+https://github.com/djc/askama?rev=eeec6f0654f32270aec4e4a0d0f42e4ad39bc28e#eeec6f0654f32270aec4e4a0d0f42e4ad39bc28e"
 dependencies = [
  "askama_derive",
  "askama_escape",
- "askama_shared",
+ "humansize",
+ "num-traits",
+ "percent-encoding",
 ]
 
 [[package]]
 name = "askama_derive"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87bf87e6e8b47264efa9bde63d6225c6276a52e05e91bf37eaa8afd0032d6b71"
+version = "0.12.0"
+source = "git+https://github.com/djc/askama?rev=eeec6f0654f32270aec4e4a0d0f42e4ad39bc28e#eeec6f0654f32270aec4e4a0d0f42e4ad39bc28e"
 dependencies = [
- "askama_shared",
- "proc-macro2",
- "syn",
-]
-
-[[package]]
-name = "askama_escape"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "619743e34b5ba4e9703bba34deac3427c72507c7159f5fd030aea8cac0cfe341"
-
-[[package]]
-name = "askama_shared"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf722b94118a07fcbc6640190f247334027685d4e218b794dbfe17c32bf38ed0"
-dependencies = [
- "askama_escape",
- "humansize",
  "mime",
  "mime_guess",
  "nom",
- "num-traits",
- "percent-encoding",
  "proc-macro2",
  "quote",
  "serde",
  "syn",
  "toml",
 ]
+
+[[package]]
+name = "askama_escape"
+version = "0.10.3"
+source = "git+https://github.com/djc/askama?rev=eeec6f0654f32270aec4e4a0d0f42e4ad39bc28e#eeec6f0654f32270aec4e4a0d0f42e4ad39bc28e"
 
 [[package]]
 name = "async-compression"
@@ -794,9 +778,12 @@ checksum = "6456b8a6c8f33fee7d958fcd1b60d55b11940a79e63ae87013e6d22e26034440"
 
 [[package]]
 name = "humansize"
-version = "1.1.1"
+version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02296996cb8796d7c6e3bc2d9211b7802812d36999a51bb754123ead7d37d026"
+checksum = "4e682e2bd70ecbcce5209f11a992a4ba001fea8e60acf7860ce007629e6d2756"
+dependencies = [
+ "libm",
+]
 
 [[package]]
 name = "hyper"
@@ -996,6 +983,12 @@ name = "libc"
 version = "0.2.133"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0f80d65747a3e43d1596c7c5492d95d5edddaabd45a7fcdb02b95f644164966"
+
+[[package]]
+name = "libm"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "348108ab3fba42ec82ff6e9564fc4ca0247bdccdc68dd8af9764bbc79c3c8ffb"
 
 [[package]]
 name = "libsqlite3-sys"

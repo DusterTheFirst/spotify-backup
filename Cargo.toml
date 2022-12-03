@@ -13,7 +13,7 @@ lto = "fat"
 overflow-checks = true
 
 [dependencies]
-askama = "^0.11"
+askama = { git = "https://github.com/djc/askama", rev = "eeec6f0654f32270aec4e4a0d0f42e4ad39bc28e" }
 axum = "^0.6"
 color-eyre = "^0.6"
 dotenvy = "^0.15"
@@ -27,7 +27,7 @@ serde = { version = "^1.0", features = ["derive"] }
 sqlx = { version = "^0.6", features = ["runtime-tokio-rustls", "sqlite"] }
 tokio = { version = "^1.21", features = ["full", "tracing"] }
 tower = { version = "^0.4" }
-tower-http = { version = "0.3.4", features = ["catch-panic", "compression-br", "cors", "fs", "request-id", "sensitive-headers", "timeout", "trace"] }
+tower-http = { version = "0.3.4", features = ["compression-br", "cors", "fs", "request-id", "sensitive-headers", "timeout", "trace"] }
 tracing = "^0.1"
 tracing-error = "0.2.0"
 tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
