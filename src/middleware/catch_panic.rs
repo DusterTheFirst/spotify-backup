@@ -116,7 +116,7 @@ pub fn catch_panic_layer<T>(
             let backtrace = Backtrace::force_capture();
             let span_trace = SpanTrace::capture();
 
-            *last_panic.lock().unwrap() = Some(PanicInfo {
+            *last_panic.lock().expect("mutex should not be poisoned") = Some(PanicInfo {
                 location: info.location().map(Location::from),
                 backtrace,
                 span_trace,
@@ -168,7 +168,7 @@ fn catch_panic(
             Err(panic_err) => panic_err,
         };
 
-        let panic_info = panic_info.lock().unwrap().take().expect(
+        let panic_info = panic_info.lock().expect("mutex should not be poisoned").take().expect(
             "panic_info should be filled with new panic information by the time catch_panic runs",
         );
 

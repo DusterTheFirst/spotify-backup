@@ -12,10 +12,12 @@ use crate::{
     templates::error::{InternalServerError, NotFound},
 };
 
+#[tracing::instrument(level = "trace")]
 pub async fn not_found(Extension(id): Extension<RequestId>, uri: Uri) -> Response {
     NotFound::response(uri.path(), id)
 }
 
+#[tracing::instrument(level = "trace")]
 pub async fn static_not_found<E>(req: Request<Body>) -> Result<Response, E> {
     Ok(NotFound::response(
         &format!("/static{}", req.uri().path()),
@@ -26,7 +28,7 @@ pub async fn static_not_found<E>(req: Request<Body>) -> Result<Response, E> {
     ))
 }
 
-#[tracing::instrument]
+#[tracing::instrument(level = "trace", skip(id))]
 pub async fn internal_server_error<E: std::error::Error>(
     Extension(id): Extension<RequestId>,
     error: E,
@@ -36,12 +38,12 @@ pub async fn internal_server_error<E: std::error::Error>(
     InternalServerError::from_error(&error, id).into_response()
 }
 
-#[tracing::instrument(skip(info))]
+#[tracing::instrument(level = "trace", skip_all)]
 pub fn internal_server_error_panic(request_id: RequestId, info: CaughtPanic) -> Response {
-    if let Some(message) = info.payload_str() {
-        error!(%message, "Service panicked");
+    if let Some(panic) = info.payload_str() {
+        error!(%panic, "service panicked");
     } else {
-        error!("Service panicked but panic info was not a &str or String");
+        error!("service panicked but panic info was not a &str or String");
     }
 
     InternalServerError::from_panic(request_id, info).into_response()
