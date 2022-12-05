@@ -1,38 +1,41 @@
 on:
-    push:
-        branches:
-            - fly
+  push:
+    branches:
+      - fly
+
+concurrency:
+  group: "rust-action"
+  cancel-in-progress: true
 
 name: Rust
 
 jobs:
-    clippy:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: dtolnay/rust-toolchain@stable
-              with:
-                  components: clippy
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+         components: clippy
 
-            - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-            - run: cargo clippy --release --all-features
+      - run: cargo clippy --release --all-features
 
-    fmt:
-        runs-on: ubuntu-latest
-        steps:
-            - uses: dtolnay/rust-toolchain@stable
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@v2
 
-            - uses: actions/checkout@v2
+      - run: cargo fmt --check
 
-            - run: cargo fmt --check
+  deploy:
+    needs: clippy
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v2
 
-    deploy:
-        needs: clippy
-        runs-on: ubuntu-latest
-        env:
-            FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        steps:
-            - uses: actions/checkout@v2
-
-            - uses: superfly/flyctl-actions/setup-flyctl@master
-            - run: flyctl deploy --remote-only
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
