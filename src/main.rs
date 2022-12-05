@@ -19,7 +19,7 @@ use tower_http::{
     cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir, timeout::TimeoutLayer,
     trace::TraceLayer, ServiceBuilderExt,
 };
-use tracing::{debug, warn, Instrument};
+use tracing::{debug, warn};
 use tracing_subscriber::{prelude::*, EnvFilter};
 
 use crate::middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};
@@ -127,7 +127,13 @@ async fn async_main(
         .route("/api/auth", get(routes::api::auth))
         .route("/api/auth/redirect", get(routes::api::auth_redirect))
         .route("/api/healthy", get(routes::api::healthy))
-        .route("/api/panic", get(routes::api::panic))
+        .route("/api/panic", {
+            if cfg!(debug_assertions) {
+                get(routes::api::panic)
+            } else {
+                get(routes::error::not_found)
+            }
+        })
         .nest_service(
             "/static",
             get_service(
