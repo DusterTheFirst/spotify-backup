@@ -1,6 +1,5 @@
+# Cargo build artifacts
 target
-.vscode
+
+# Development secrets and environment variables
 .env
-fly.toml
-LICENSE
-logo.xcf

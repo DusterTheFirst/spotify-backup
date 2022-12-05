@@ -1,2 +1,8 @@
-/target
+# Cargo build artifacts
+target
+
+# Development secrets and environment variables
 .env
+
+# Cargo Chef recipe in dockerfile
+recipe.json
