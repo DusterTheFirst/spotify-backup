@@ -14,6 +14,8 @@ RUN cargo chef cook --release --recipe-path recipe.json
 # Build application
 COPY . .
 RUN set -eux; \
+    # Make Git happy (fly.toml does not get copied when running `fly deploy`)
+    git restore fly.toml; \
     cargo build --release; \
     objcopy --compress-debug-sections target/release/spotify-backup ./spotify-backup
 
