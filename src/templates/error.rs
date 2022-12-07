@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use crate::middleware::catch_panic::CaughtPanic;
+use crate::middleware::{catch_panic::CaughtPanic, RequestMetadata};
 
 use super::into_response;
 
@@ -9,21 +9,19 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use git_version::git_version;
-use tower_http::request_id::RequestId;
 
 #[derive(Template, Debug)]
 #[template(path = "error/404.html")]
 pub struct NotFound<'s> {
     path: &'s str,
-    request_id: RequestId,
+    request_meta: RequestMetadata,
 }
 
 impl<'s> NotFound<'s> {
-    pub fn response(path: &str, request_id: RequestId) -> Response {
+    pub fn response(path: &str, request_meta: RequestMetadata) -> Response {
         (
             StatusCode::NOT_FOUND,
-            into_response(NotFound { path, request_id }),
+            into_response(NotFound { path, request_meta }),
         )
             .into_response()
     }
@@ -33,7 +31,7 @@ impl<'s> NotFound<'s> {
 #[template(path = "error/500.html")]
 pub struct InternalServerError {
     details: Option<InternalServerErrorDetails>,
-    request_id: RequestId,
+    request_meta: RequestMetadata,
 }
 
 #[derive(Debug)]
@@ -45,7 +43,7 @@ enum InternalServerErrorDetails {
 #[derive(Template, Debug)]
 #[template(path = "error/500-error.html")]
 struct InternalServerErrorError {
-    error_message: String,
+    error_message: String, // TODO:
     source: Vec<String>,
 }
 
@@ -66,7 +64,7 @@ fn error_sources(error: &dyn Error) -> Vec<String> {
 }
 
 impl InternalServerError {
-    pub fn from_error(error: &dyn Error, request_id: RequestId) -> Self {
+    pub fn from_error(error: &dyn Error, request_meta: RequestMetadata) -> Self {
         InternalServerError {
             details: cfg!(debug_assertions).then_some(InternalServerErrorDetails::Error(
                 InternalServerErrorError {
@@ -74,17 +72,16 @@ impl InternalServerError {
                     source: error_sources(&error),
                 },
             )),
-
-            request_id,
+            request_meta,
         }
     }
 
-    pub fn from_panic(request_id: RequestId, panic_info: CaughtPanic) -> Self {
+    pub fn from_panic(panic_info: CaughtPanic, request_meta: RequestMetadata) -> Self {
         InternalServerError {
             details: cfg!(debug_assertions).then_some(InternalServerErrorDetails::Panic(
                 InternalServerErrorPanic { panic: panic_info },
             )),
-            request_id,
+            request_meta,
         }
     }
 }

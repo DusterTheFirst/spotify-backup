@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        {% include "include/head.html" %}
 
         <title>{% block status_code %}{% endblock %} ({% block status_message %}{% endblock %}) - Spotify Backup</title>
 
@@ -40,10 +39,19 @@
             <a href="/">return home</a>
         </nav>
         <footer>
-            <code>{{ env!("CARGO_PKG_NAME") }} {{ env!("CARGO_PKG_VERSION") }}</code>
-            <code>(commit <a href='https://github.com/dusterthefirst/spotify-backup/tree/{{ git_version!(args = ["--always"]) }}'
-                    target="_blank">{{ git_version!() }}</a>)</code>
-            <span>Request ID: <code>{{ request_id.header_value().to_str().expect("x-request-id should be valid utf-8") }}</code></span>
+            <section>
+                <h4>Request ID</h4>
+                <code>{{ request_meta.request_id }}</code>
+            </section>
+            <section>
+                <h4>Region</h4>
+                {{ request_meta.region }}
+            </section>
+            <section>
+                <h4>Server</h4>
+                <code>{{ request_meta.server.name }} {{ request_meta.server.version }}</code>
+                <code>(commit <a href='{{ request_meta.server.source }}' target="_blank">{{ request_meta.server.commit }}</a>)</code>
+            </section>
         </footer>
     </body>
 </html>

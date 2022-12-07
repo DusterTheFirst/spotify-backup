@@ -83,10 +83,10 @@ fn main() -> Result<(), color_eyre::Report> {
 
     let _guard = sentry::init(sentry::ClientOptions {
         dsn: sentry_dsn,
+        // TODO: setup release tracking
         release: sentry::release_name!(), // TODO: use git hash?
         sample_rate: 1.0,
-        traces_sample_rate: 1.0,
-        // traces_sampler: todo!(), TODO: Do not send too many traces
+        traces_sample_rate: 0.0, // TODO: make not 0, but also not spammy
         enable_profiling: true,
         profiles_sample_rate: 1.0,
         attach_stacktrace: true,
@@ -122,18 +122,24 @@ async fn async_main(
     let host =
         Authority::from_maybe_shared(http.host).expect("DOMAIN should be a valid URI authority");
 
-    let app = Router::new()
-        .route("/", get(routes::root))
-        .route("/api/auth", get(routes::api::auth))
-        .route("/api/auth/redirect", get(routes::api::auth_redirect))
-        .route("/api/healthy", get(routes::api::healthy))
-        .route("/api/panic", {
+    let api_router = Router::new()
+        .route("/auth", get(routes::api::auth))
+        .route("/auth/redirect", get(routes::api::auth_redirect))
+        .route("/healthy", get(routes::api::healthy))
+        .route("/panic", {
             if cfg!(debug_assertions) {
                 get(routes::api::panic)
             } else {
                 get(routes::error::not_found)
             }
         })
+        .fallback(routes::api::not_found);
+
+    let app = Router::new()
+        .route("/", get(routes::root))
+        .nest("/api/", api_router)
+        // TODO: Image resizing/optimization
+        .route("/favicon.ico", get(routes::favicon))
         .nest_service(
             "/static",
             get_service(
