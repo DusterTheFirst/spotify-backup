@@ -21,20 +21,20 @@ pub async fn not_found(
 }
 
 #[tracing::instrument(level = "trace", skip_all)]
-pub async fn static_not_found<E>(mut req: Request<Body>) -> Result<Response, E> {
+pub async fn static_not_found(mut req: Request<Body>) -> Response {
     let request_meta = req
         .extract_parts::<RequestMetadata>()
         .await
         .expect("RequestMetadata should be infallible");
 
-    Ok(NotFound::response(
+    NotFound::response(
         req.extensions()
             .get::<OriginalUri>()
             .expect("OriginalUri extractor should exist on router")
             .0
             .path(),
         request_meta,
-    ))
+    )
 }
 
 #[tracing::instrument(level = "trace", skip(request_metadata))]

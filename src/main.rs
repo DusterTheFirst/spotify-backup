@@ -9,12 +9,11 @@ use std::{borrow::Cow, env, net::SocketAddr, path::PathBuf, time::Duration};
 
 use axum::{
     http::{header, uri::Authority},
-    routing::{get, get_service},
+    routing::get,
     Router,
 };
 use color_eyre::eyre::Context;
 use serde::Deserialize;
-use tower::service_fn;
 use tower_http::{
     cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir, timeout::TimeoutLayer,
     trace::TraceLayer, ServiceBuilderExt,
@@ -28,25 +27,12 @@ mod middleware;
 mod routes;
 mod templates;
 
-#[derive(Deserialize)]
-struct Environment {
-    #[serde(flatten)]
-    http: HttpEnvironment,
-    #[serde(flatten)]
-    spotify: SpotifyEnvironment,
-    #[serde(flatten)]
-    github: GithubEnvironment,
-    sentry_dsn: Option<String>,
-}
-
-#[derive(Deserialize)]
 struct HttpEnvironment {
     bind: SocketAddr,
-    host: String,
+    host: Authority,
     static_dir: PathBuf,
 }
 
-#[derive(Deserialize)]
 struct SpotifyEnvironment {
     spotify_client_id: String,
     spotify_client_secret: String,
@@ -56,13 +42,7 @@ struct SpotifyEnvironment {
 struct GithubEnvironment {}
 
 fn main() -> Result<(), color_eyre::Report> {
-    #[cfg(debug_assertions)]
-    dotenvy::dotenv().ok();
-
     color_eyre::install()?;
-
-    let environment: Environment =
-        envy::from_env().wrap_err("failed to load configuration from environment")?;
 
     tracing_subscriber::Registry::default()
         .with(tracing_error::ErrorLayer::default())
@@ -71,18 +51,13 @@ fn main() -> Result<(), color_eyre::Report> {
         .with(sentry::integrations::tracing::layer())
         .init();
 
-    let sentry_dsn = environment
-        .sentry_dsn
-        .map(|dsn| dsn.parse())
-        .transpose()
+    let sentry_dsn = env::var("SENTRY_DSN")
+        .expect("$SENTRY_DSN must be set")
+        .parse()
         .wrap_err("SENTRY_DSN should be a valid DSN")?;
 
-    if sentry_dsn.is_none() {
-        warn!("No SENTRY_DSN provided, not reporting errors to sentry");
-    }
-
     let _guard = sentry::init(sentry::ClientOptions {
-        dsn: sentry_dsn,
+        dsn: Some(sentry_dsn),
         // TODO: setup release tracking
         release: sentry::release_name!(), // TODO: use git hash?
         sample_rate: 1.0,
@@ -105,9 +80,26 @@ fn main() -> Result<(), color_eyre::Report> {
         .build()
         .expect("tokio runtime builder should succeed")
         .block_on(async_main(
-            environment.http,
-            environment.spotify,
-            environment.github,
+            HttpEnvironment {
+                bind: env::var("BIND")
+                    .expect("$BIND should be set")
+                    .parse()
+                    .expect("$BIND should be a valid SocketAddr"),
+                host: env::var("HOST")
+                    .expect("$HOST should be set")
+                    .parse()
+                    .expect("$HOST should be a valid URI authority"),
+                static_dir: env::var_os("STATIC_DIR")
+                    .expect("$STATIC_DIR should be set")
+                    .into(),
+            },
+            SpotifyEnvironment {
+                spotify_client_id: env::var("SPOTIFY_CLIENT_ID")
+                    .expect("$SPOTIFY_CLIENT_ID should be set"),
+                spotify_client_secret: env::var("SPOTIFY_CLIENT_SECRET")
+                    .expect("$SPOTIFY_CLIENT_SECRET should be set"),
+            },
+            GithubEnvironment {},
         ))
 }
 
@@ -118,9 +110,6 @@ async fn async_main(
 ) -> color_eyre::Result<()> {
     let rspotify_credentials =
         rspotify::Credentials::new(&spotify.spotify_client_id, &spotify.spotify_client_secret);
-
-    let host =
-        Authority::from_maybe_shared(http.host).expect("DOMAIN should be a valid URI authority");
 
     let api_router = Router::new()
         .route("/auth", get(routes::api::auth))
@@ -142,14 +131,9 @@ async fn async_main(
         .route("/favicon.ico", get(routes::favicon))
         .nest_service(
             "/static",
-            get_service(
-                ServeDir::new(http.static_dir)
-                    .append_index_html_on_directories(false)
-                    .fallback(service_fn(
-                        routes::error::static_not_found::<std::io::Error>,
-                    )),
-            )
-            .handle_error(routes::error::internal_server_error),
+            ServeDir::new(http.static_dir)
+                .append_index_html_on_directories(false)
+                .call_fallback_on_method_not_allowed(true),
         )
         .fallback(routes::error::not_found)
         .layer(
@@ -176,14 +160,15 @@ async fn async_main(
                         .allow_credentials(false)
                         .allow_headers([])
                         .allow_methods([])
-                        .allow_origin([host
+                        .allow_origin([http
+                            .host
                             .as_str()
                             .parse()
                             .expect("HOST should be a valid HeaderValue")]),
                 )
                 // Redirect requests that are not to the configured domain
                 .layer(axum::middleware::from_fn_with_state(
-                    host,
+                    http.host,
                     middleware::redirect_to_domain,
                 ))
                 // Catch Panics in handlers

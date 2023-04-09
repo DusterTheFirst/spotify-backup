@@ -1,37 +1,48 @@
 [package]
 edition = "2021"
-name = "spotify-backup"
+name    = "spotify-backup"
 version = "0.0.0-prerelease"
 
 [profile.dev.package."*"]
 opt-level = 2
 
 [profile.release]
-codegen-units = 1
-debug = 1
-lto = "fat"
+codegen-units   = 1
+debug           = 1
+lto             = "thin"
 overflow-checks = true
 
 [dependencies]
-askama = { git = "https://github.com/djc/askama", rev = "eeec6f0654f32270aec4e4a0d0f42e4ad39bc28e" }
-axum = { version = "^0.6", features = ["original-uri", "macros"] }
-color-eyre = "^0.6"
+# Web
+askama     = "0.12.0"
+axum       = { version = "0.6.12", features = ["macros", "original-uri"] }
+tower      = { version = "0.4.13" }
+tower-http = { version = "0.4.0", features = ["full"] }
+
+# Email
+lettre = { version = "0.10.4", default-features = false, features = ["builder", "hostname", "pool", "smtp-transport", "tokio1-rustls-tls"] }
+
+# Github
+octocrab = { version = "0.19.0", default-features = false, features = ["rustls", "stream"] }
+
+# Spotify
+rspotify = { version = "0.11.6", default-features = false, features = ["client-reqwest", "reqwest-rustls-tls"] }
+
+# Database
+sqlx = { version = "0.6.3", features = ["runtime-tokio-rustls", "sqlite"] }
+
+# Utility
 const_format = { version = "0.2.30", features = ["rust_1_64"] }
-dotenvy = "^0.15"
-envy = "^0.4"
-futures = "^0.3"
-git-version = "^0.3"
-lettre = { version = "^0.10", default-features = false, features = ["builder", "hostname", "pool", "smtp-transport", "tokio1-rustls-tls"] }
-octocrab = { version = "^0.17", default-features = false, features = ["rustls", "stream"] }
-once_cell = "1.16.0"
-rspotify = { version = "^0.11", default-features = false, features = ["client-reqwest", "reqwest-rustls-tls"] }
-sentry = { version = "^0.29", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls", "tower", "tower-http", "tracing"] }
-serde = { version = "^1.0", features = ["derive"] }
-serde_json = "1.0.89"
-sqlx = { version = "^0.6", features = ["runtime-tokio-rustls", "sqlite"] }
-tokio = { version = "^1.21", features = ["full", "tracing"] }
-tower = { version = "^0.4" }
-tower-http = { version = "^0.3", features = ["compression-br", "cors", "fs", "request-id", "sensitive-headers", "timeout", "trace"] }
-tracing = "^0.1"
-tracing-error = "^0.2"
-tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
+futures      = "0.3.28"
+git-version  = "0.3.5"
+once_cell    = "1.16.0"
+serde        = { version = "1.0.159", features = ["derive"] }
+serde_json   = "1.0.89"
+tokio        = { version = "1.27.0", features = ["full", "tracing"] }
+
+# Debugging
+color-eyre         = "0.6.2"
+sentry             = { version = "0.30.0", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls", "tower", "tower-http", "tracing"] }
+tracing            = "0.1.37"
+tracing-error      = "0.2.0"
+tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
