@@ -116,11 +116,11 @@ async fn async_main(
         .route("/auth/redirect", get(routes::api::auth_redirect))
         .route("/healthy", get(routes::api::healthy))
         .route("/panic", {
-            // if cfg!(debug_assertions) {
+            if cfg!(debug_assertions) {
                 get(routes::api::panic)
-            // } else {
-            //     get(routes::error::not_found)
-            // }
+            } else {
+                get(routes::error::not_found)
+            }
         })
         .fallback(routes::api::not_found);
 
