@@ -69,7 +69,7 @@ fn main() -> Result<(), color_eyre::Report> {
         server_name: env::var("FLY_REGION").map(Cow::from).ok(),
         in_app_include: vec!["spotify_backup"],
         // in_app_exclude: todo!(),
-        // auto_session_tracking: true,
+        auto_session_tracking: true,
         session_mode: sentry::SessionMode::Request,
         trim_backtraces: true,
         ..Default::default()
