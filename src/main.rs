@@ -24,8 +24,8 @@ use tracing_subscriber::{prelude::*, EnvFilter};
 use crate::middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};
 
 mod middleware;
-mod routes;
 mod pages;
+mod routes;
 
 struct HttpEnvironment {
     bind: SocketAddr,
@@ -59,7 +59,7 @@ fn main() -> Result<(), color_eyre::Report> {
     let _guard = sentry::init(sentry::ClientOptions {
         dsn: Some(sentry_dsn),
         // TODO: setup release tracking
-        release: sentry::release_name!(), // TODO: use git hash?
+        release: Some(git_version::git_version!(args = ["--always", "--abbrev=40"]).into()), // sentry::release_name!(), // TODO: use git hash?
         sample_rate: 1.0,
         traces_sample_rate: 0.0, // TODO: make not 0, but also not spammy
         enable_profiling: true,
