@@ -9,7 +9,7 @@ use tracing::error;
 
 use crate::{
     middleware::{catch_panic::CaughtPanic, RequestMetadata},
-    templates::error::{InternalServerError, NotFound},
+    pages::error::{InternalServerError, NotFound},
 };
 
 #[tracing::instrument(level = "trace", skip(request_metadata))]

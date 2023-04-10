@@ -14,6 +14,8 @@ overflow-checks = true
 
 [dependencies]
 # Web
+axohtml = "0.5.0"
+
 askama     = "0.12.0"
 axum       = { version = "0.6.12", features = ["macros", "original-uri"] }
 tower      = { version = "0.4.13" }

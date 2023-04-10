@@ -25,7 +25,7 @@ use crate::middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};
 
 mod middleware;
 mod routes;
-mod templates;
+mod pages;
 
 struct HttpEnvironment {
     bind: SocketAddr,
@@ -125,7 +125,7 @@ async fn async_main(
         .fallback(routes::api::not_found);
 
     let app = Router::new()
-        .route("/", get(routes::root))
+        .route("/", get(routes::index::index))
         .nest("/api/", api_router)
         // TODO: Image resizing/optimization
         .route("/favicon.ico", get(routes::favicon))
