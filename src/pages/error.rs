@@ -1,10 +1,9 @@
-use std::error::Error;
+use std::{error::Error, fmt::Display};
 
 use crate::middleware::{catch_panic::CaughtPanic, RequestMetadata};
 
-use super::{into_response, Page};
+use super::Page;
 
-use askama::Template;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -28,104 +27,111 @@ impl<'s> NotFound<'s> {
     }
 }
 
-#[derive(Template, Debug)]
-#[template(path = "error/500.html")]
-pub struct InternalServerError {
-    details: Option<InternalServerErrorDetails>,
-    request_meta: RequestMetadata,
-}
-
-#[derive(Debug)]
-enum InternalServerErrorDetails {
-    Error(InternalServerErrorError),
-    Panic(InternalServerErrorPanic),
-}
-
-#[derive(Template, Debug)]
-#[template(path = "error/500-error.html")]
-struct InternalServerErrorError {
-    error_message: String, // TODO:
-    source: Vec<String>,
-}
-
-#[derive(Template, Debug)]
-#[template(path = "error/500-panic.html")]
-struct InternalServerErrorPanic {
-    panic: CaughtPanic,
-}
-
-fn error_sources(error: &dyn Error) -> Vec<String> {
+fn error_sources(error: &dyn Error) -> Box<dyn Iterator<Item = String>> {
     if let Some(source) = error.source() {
-        let mut sources = error_sources(source);
-        sources.push(source.to_string());
-        return sources;
+        return Box::new(std::iter::once(source.to_string()).chain(error_sources(source)));
     }
 
-    vec![]
+    Box::new(std::iter::empty())
 }
 
-impl InternalServerError {
-    pub fn from_error(error: &dyn Error, request_meta: RequestMetadata) -> Self {
-        InternalServerError {
-            details: cfg!(debug_assertions).then_some(InternalServerErrorDetails::Error(
-                InternalServerErrorError {
-                    error_message: error.to_string(),
-                    source: error_sources(&error),
-                },
-            )),
-            request_meta,
-        }
-    }
+pub fn dyn_error(error: &dyn Error, request_meta: RequestMetadata) -> impl IntoResponse {
+    let sources = error_sources(&error);
+    let error = error.to_string();
 
-    pub fn from_panic(panic_info: CaughtPanic, request_meta: RequestMetadata) -> Self {
-        InternalServerError {
-            details: cfg!(debug_assertions).then_some(InternalServerErrorDetails::Panic(
-                InternalServerErrorPanic { panic: panic_info },
-            )),
-            request_meta,
-        }
-    }
+    self::error(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        request_meta,
+        if cfg!(debug_assertions) {
+            rsx! {
+                div {
+                    error
+                }
+                div {
+                    for (i, source) in sources.enumerate() {
+                        div { key: "{i}", source }
+                    }
+                }
+            }
+        } else {
+            rsx! { "" }
+        },
+    )
 }
 
-impl IntoResponse for InternalServerError {
-    fn into_response(self) -> Response {
-        (StatusCode::INTERNAL_SERVER_ERROR, into_response(self)).into_response()
-    }
+pub fn panic_error(panic_info: CaughtPanic, request_meta: RequestMetadata) -> impl IntoResponse {
+    error(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        request_meta,
+        if cfg!(debug_assertions) {
+            rsx! {
+                div { "The application panicked." }
+                div {
+                    if let Some(message) = panic_info.payload_str() {
+                        rsx! { "Message: {message}" }
+                    } else {
+                        rsx! { "Unknown panic message" }
+                    }
+                }
+                div {
+                    if let Some(location) = panic_info.location() {
+                        rsx! { "Location: {location}" }
+                    }
+                }
+
+                h2 { "Span Trace" }
+                pre { panic_info.span_trace().to_string() }
+
+                h2 { "Backtrace" }
+                pre { panic_info.backtrace().to_string() }
+            }
+        } else {
+            rsx! { "" }
+        },
+    )
 }
 
 pub fn error(
-    (status_code, status_message): (u16, &'static str),
-    main: Element<'static>,
+    status: StatusCode,
     request_meta: RequestMetadata,
-) -> Page<'static> {
-    Page {
-        title: rsx! { "{status_code} ({status_message})" },
-        head: None,
-        content: rsx! {
-            header {
-                h1 { "{status_code} | {status_message}" }
-            }
-            main {
-                main
-            },
-            nav {
-                a { href: "/", "return home" }
-            },
-            footer {
-                section {
-                    h4 { "Request ID" }
-                    code { request_meta.request_id }
+    body: LazyNodes<'static, 'static>,
+) -> (StatusCode, Page<'static>) {
+    let status_code = status.as_str();
+    let status_reason = status.canonical_reason().unwrap_or("Unknown Error");
+
+    (
+        status,
+        Page {
+            title: rsx! { "{status_code} ({status_reason})" },
+            head: Some(rsx! {
+                style { include_str!("error.css") }
+            }),
+            content: rsx! {
+                header {
+                    h1 { "{status_code} | {status_reason}" }
                 }
-                section {
-                    h4 { "Region" }
-                    request_meta.region
-                }
-                section {
-                    h4 { "Server" }
-                    code { "{request_meta.server.name} {request_meta.server.version}" }
-                    code { "(commit " a { href:request_meta.server.source, target:"_blank", request_meta.server.commit } ")" }
-                }
+                main {
+                    body
+                },
+                nav {
+                    a { href: "/", "return home" }
+                },
+                footer {
+                    section {
+                        h4 { "Request ID" }
+                        code { request_meta.request_id }
+                    }
+                    section {
+                        h4 { "Region" }
+                        request_meta.region
+                    }
+                    section {
+                        h4 { "Server" }
+                        code { "{request_meta.server.name} {request_meta.server.version}" }
+                        code { "(commit " a { href:request_meta.server.source, target:"_blank", request_meta.server.commit } ")" }
+                    }
+                },
             },
         },
-    }
+    )
 }
