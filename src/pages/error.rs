@@ -1,4 +1,4 @@
-use std::{error::Error, fmt::Display};
+use std::error::Error;
 
 use crate::middleware::{catch_panic::CaughtPanic, RequestMetadata};
 
@@ -10,21 +10,20 @@ use axum::{
 };
 use dioxus::prelude::*;
 
-#[derive(Template, Debug)]
-#[template(path = "error/404.html")]
-pub struct NotFound<'s> {
-    path: &'s str,
-    request_meta: RequestMetadata,
-}
-
-impl<'s> NotFound<'s> {
-    pub fn response(path: &str, request_meta: RequestMetadata) -> Response {
-        (
-            StatusCode::NOT_FOUND,
-            into_response(NotFound { path, request_meta }),
-        )
-            .into_response()
-    }
+pub fn not_found(path: &str, request_meta: RequestMetadata) -> Response {
+    error(
+        StatusCode::NOT_FOUND,
+        request_meta,
+        rsx! {
+            div {
+                code {
+                    path
+                }
+                " not found"
+            }
+        },
+    )
+    .into_response()
 }
 
 fn error_sources(error: &dyn Error) -> Box<dyn Iterator<Item = String>> {
@@ -91,12 +90,12 @@ pub fn panic_error(panic_info: CaughtPanic, request_meta: RequestMetadata) -> im
     )
 }
 
-pub fn error(
+fn error<'a>(
     status: StatusCode,
     request_meta: RequestMetadata,
-    body: LazyNodes<'static, 'static>,
-) -> (StatusCode, Page<'static>) {
-    let status_code = status.as_str();
+    body: LazyNodes<'a, 'a>,
+) -> (StatusCode, Page<'a>) {
+    let status_code = status.as_u16();
     let status_reason = status.canonical_reason().unwrap_or("Unknown Error");
 
     (
