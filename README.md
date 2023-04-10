@@ -2,8 +2,16 @@
 
 ## Developer Information
 
+Tools needed:
+
 -   use `direnv` for loading `.envrc`
 -   use `git-crypt` for decrypting `.envrc`
+
+Utility Scripts:
+
+-   use `scripts/deploy.sh` for deployment
+
+Services:
 
 -   [`fly.io` dashboard](https://fly.io/dashboard/spotify-backup)
 -   [`fly.io` grafana](https://fly-metrics.net/d/fly-app/fly-app?orgId=74090&var-app=spotify-backup)
