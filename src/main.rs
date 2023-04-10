@@ -18,7 +18,7 @@ use tower_http::{
     cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir, timeout::TimeoutLayer,
     trace::TraceLayer, ServiceBuilderExt,
 };
-use tracing::{debug, warn};
+use tracing::debug;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
 use crate::middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};

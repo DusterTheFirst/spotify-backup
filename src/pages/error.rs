@@ -2,13 +2,14 @@ use std::error::Error;
 
 use crate::middleware::{catch_panic::CaughtPanic, RequestMetadata};
 
-use super::into_response;
+use super::{into_response, Page};
 
 use askama::Template;
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use dioxus::prelude::*;
 
 #[derive(Template, Debug)]
 #[template(path = "error/404.html")]
@@ -89,5 +90,42 @@ impl InternalServerError {
 impl IntoResponse for InternalServerError {
     fn into_response(self) -> Response {
         (StatusCode::INTERNAL_SERVER_ERROR, into_response(self)).into_response()
+    }
+}
+
+pub fn error(
+    (status_code, status_message): (u16, &'static str),
+    main: Element<'static>,
+    request_meta: RequestMetadata,
+) -> Page<'static> {
+    Page {
+        title: rsx! { "{status_code} ({status_message})" },
+        head: None,
+        content: rsx! {
+            header {
+                h1 { "{status_code} | {status_message}" }
+            }
+            main {
+                main
+            },
+            nav {
+                a { href: "/", "return home" }
+            },
+            footer {
+                section {
+                    h4 { "Request ID" }
+                    code { request_meta.request_id }
+                }
+                section {
+                    h4 { "Region" }
+                    request_meta.region
+                }
+                section {
+                    h4 { "Server" }
+                    code { "{request_meta.server.name} {request_meta.server.version}" }
+                    code { "(commit " a { href:request_meta.server.source, target:"_blank", request_meta.server.commit } ")" }
+                }
+            },
+        },
     }
 }
