@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use crate::middleware::{catch_panic::CaughtPanic, RequestMetadata};
+use crate::router::middleware::{catch_panic::CaughtPanic, RequestMetadata};
 
 use super::Page;
 
@@ -16,9 +16,7 @@ pub fn not_found(path: &str, request_meta: RequestMetadata) -> Response {
         request_meta,
         rsx! {
             div {
-                code {
-                    path
-                }
+                code { path }
                 " not found"
             }
         },
@@ -43,17 +41,15 @@ pub fn dyn_error(error: &dyn Error, request_meta: RequestMetadata) -> impl IntoR
         request_meta,
         if cfg!(debug_assertions) {
             rsx! {
+                div { error }
                 div {
-                    error
-                }
-                div {
-                    for (i, source) in sources.enumerate() {
+                    for (i , source) in sources.enumerate() {
                         div { key: "{i}", source }
                     }
                 }
             }
         } else {
-            rsx! { "" }
+            rsx! {""}
         },
     )
 }
@@ -85,7 +81,7 @@ pub fn panic_error(panic_info: CaughtPanic, request_meta: RequestMetadata) -> im
                 pre { panic_info.backtrace().to_string() }
             }
         } else {
-            rsx! { "" }
+            rsx! {""}
         },
     )
 }

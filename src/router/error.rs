@@ -7,10 +7,9 @@ use axum::{
 };
 use tracing::error;
 
-use crate::{
-    middleware::{catch_panic::CaughtPanic, RequestMetadata},
-    pages::error,
-};
+use crate::pages::error;
+
+use super::middleware::{catch_panic::CaughtPanic, RequestMetadata};
 
 #[tracing::instrument(level = "trace", skip(request_metadata))]
 pub async fn not_found(

@@ -1,7 +1,7 @@
 use axum::{extract::OriginalUri, response::Redirect, Json};
 use serde_json::{json, Value};
 
-use crate::middleware::RequestMetadata;
+use crate::router::middleware::RequestMetadata;
 
 #[axum::debug_handler]
 pub async fn not_found(
