@@ -1,12 +1,14 @@
 use dioxus::prelude::*;
 
-use crate::pages::Page;
+use super::Page;
 
-pub async fn index() -> Page<'static> {
+pub async fn login() -> Page<'static> {
     Page {
-        title: rsx! { "Home" },
+        title: rsx! { "Login" },
         head: None,
         content: rsx! {
+            h1 { "welcome" }
+
             menu {
                 li {
                     a { href: "/login/spotify",

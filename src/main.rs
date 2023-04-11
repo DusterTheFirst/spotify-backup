@@ -1,9 +1,5 @@
 #![forbid(unsafe_code)]
-#![deny(
-    elided_lifetimes_in_paths,
-    clippy::unwrap_used,
-    clippy::unwrap_in_result
-)]
+#![deny(clippy::unwrap_in_result)]
 
 use std::{borrow::Cow, env, net::SocketAddr, path::PathBuf};
 

@@ -10,12 +10,12 @@ use tracing::debug;
 
 use middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};
 
+use crate::pages;
+
 use super::{GithubEnvironment, HttpEnvironment, SpotifyEnvironment};
 
-pub mod api;
+pub mod authentication;
 pub mod error;
-pub mod index;
-pub mod login;
 pub mod middleware;
 
 pub async fn favicon() -> Redirect {
@@ -30,24 +30,14 @@ pub async fn router(
     let rspotify_credentials =
         rspotify::Credentials::new(&spotify.spotify_client_id, &spotify.spotify_client_secret);
 
-    let api_router = Router::new()
-        .route("/auth", get(api::auth))
-        .route("/auth/redirect", get(api::auth_redirect))
-        .route("/healthy", get(api::healthy))
-        .route("/panic", {
-            if cfg!(debug_assertions) {
-                get(api::panic)
-            } else {
-                get(error::not_found)
-            }
-        })
-        .fallback(api::not_found);
-
     let app = Router::new()
-        .route("/", get(index::index))
-        .nest("/api/", api_router)
+        .route("/", get(pages::dashboard))
+        .route("/login", get(pages::login))
+        .route("/login/spotify", get(authentication::login_spotify))
+        .route("/login/github", get(authentication::login_github))
         // TODO: Image resizing/optimization
         .route("/favicon.ico", get(favicon))
+        .route("/healthy", get(|| async { "OK" }))
         .nest_service(
             "/static",
             ServeDir::new(http.static_dir)
@@ -62,11 +52,11 @@ pub async fn router(
                 // Give a unique identifier to every request
                 .propagate_x_request_id()
                 .set_x_request_id(MakeRequestUuid) // TODO: USE
+                // Trace requests and responses
+                .layer(TraceLayer::new_for_http().make_span_with(SpanMaker)) // TODO: configure
                 // Send traces to sentry
                 .layer(sentry::integrations::tower::NewSentryLayer::new_from_top())
                 .layer(sentry::integrations::tower::SentryHttpLayer::with_transaction())
-                // Trace requests and responses
-                .layer(TraceLayer::new_for_http().make_span_with(SpanMaker)) // TODO: configure
                 // Timeout if request or response hangs
                 .layer(TimeoutLayer::new(Duration::from_secs(10)))
                 // Compress responses

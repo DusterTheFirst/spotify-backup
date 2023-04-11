@@ -4,7 +4,15 @@ use axum::{
 };
 use dioxus::prelude::*;
 
-pub mod error;
+mod dashboard;
+mod error;
+mod login;
+
+pub use {
+    dashboard::dashboard,
+    error::{dyn_error, not_found, panic_error},
+    login::login,
+};
 
 pub struct Page<'e> {
     pub title: LazyNodes<'e, 'e>,
