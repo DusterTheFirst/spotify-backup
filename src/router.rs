@@ -30,7 +30,7 @@ pub async fn router(
 ) -> color_eyre::Result<()> {
     let rspotify_oauth = rspotify::OAuth {
         redirect_uri: spotify.redirect_uri.to_string(),
-        scopes: scopes!(),
+        scopes: scopes!("playlist-read-private", "user-library-read"),
         ..Default::default()
     };
 
