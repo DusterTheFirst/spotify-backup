@@ -10,10 +10,10 @@ use axum::{
 };
 use dioxus::prelude::*;
 
-pub fn not_found(path: &str, request_meta: RequestMetadata) -> Response {
+pub fn not_found(path: &str, request_meta: &RequestMetadata) -> Response {
     error(
         StatusCode::NOT_FOUND,
-        request_meta,
+        &request_meta,
         rsx! {
             div {
                 code { path }
@@ -32,7 +32,7 @@ fn error_sources(error: &dyn Error) -> Box<dyn Iterator<Item = String>> {
     Box::new(std::iter::empty())
 }
 
-pub fn dyn_error(error: &dyn Error, request_meta: RequestMetadata) -> impl IntoResponse {
+pub fn dyn_error(error: &dyn Error, request_meta: &RequestMetadata) -> impl IntoResponse {
     let sources = error_sources(&error);
     let error = error.to_string();
 
@@ -42,9 +42,9 @@ pub fn dyn_error(error: &dyn Error, request_meta: RequestMetadata) -> impl IntoR
         if cfg!(debug_assertions) {
             rsx! {
                 div { error }
-                div {
+                ul {
                     for (i , source) in sources.enumerate() {
-                        div { key: "{i}", source }
+                        li { key: "{i}", source }
                     }
                 }
             }
@@ -54,10 +54,10 @@ pub fn dyn_error(error: &dyn Error, request_meta: RequestMetadata) -> impl IntoR
     )
 }
 
-pub fn panic_error(panic_info: CaughtPanic, request_meta: RequestMetadata) -> impl IntoResponse {
+pub fn panic_error(panic_info: CaughtPanic, request_meta: &RequestMetadata) -> impl IntoResponse {
     error(
         StatusCode::INTERNAL_SERVER_ERROR,
-        request_meta,
+        &request_meta,
         if cfg!(debug_assertions) {
             rsx! {
                 div { "The application panicked." }
@@ -88,7 +88,7 @@ pub fn panic_error(panic_info: CaughtPanic, request_meta: RequestMetadata) -> im
 
 fn error<'a>(
     status: StatusCode,
-    request_meta: RequestMetadata,
+    request_meta: &RequestMetadata,
     body: LazyNodes<'a, 'a>,
 ) -> (StatusCode, Page<'a>) {
     let status_code = status.as_u16();
@@ -111,7 +111,7 @@ fn error<'a>(
                 nav {
                     a { href: "/", "return home" }
                 },
-                // TODO: what do with?
+                // TODO: what do with? why even have?
                 // footer {
                 //     section {
                 //         h4 { "Request ID" }

@@ -1,17 +1,19 @@
-use std::time::Duration;
+use std::{fmt::Write, time::Duration};
 
-use axum::{http::header, response::Redirect, routing::get, Router};
+use axum::{extract::State, http::header, response::Redirect, routing::get, Router};
 use color_eyre::eyre::Context;
-use rspotify::scopes;
 use tower_http::{
     cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir, timeout::TimeoutLayer,
     trace::TraceLayer, ServiceBuilderExt,
 };
-use tracing::debug;
+use tracing::{debug, error};
 
 use middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};
 
-use crate::pages;
+use crate::{
+    database::{self, Database},
+    pages,
+};
 
 use super::{GithubEnvironment, HttpEnvironment, SpotifyEnvironment};
 
@@ -28,17 +30,19 @@ pub async fn router(
     spotify: SpotifyEnvironment,
     github: GithubEnvironment,
 ) -> color_eyre::Result<()> {
+    let database = database::connect().await;
+
     let app = Router::new()
         .route("/", get(pages::dashboard))
         .route("/login", get(pages::login))
         .route(
             "/login/spotify",
-            get(authentication::login_spotify).with_state(spotify),
+            get(authentication::spotify::login).with_state((spotify, database.clone())),
         )
         .route("/login/github", get(authentication::login_github))
         // TODO: Image resizing/optimization
         .route("/favicon.ico", get(favicon))
-        .route("/health", get(|| async { "OK" }))
+        .route("/health", get(health).with_state(database))
         .nest_service(
             "/static",
             ServeDir::new(http.static_dir)
@@ -90,4 +94,21 @@ pub async fn router(
         .serve(app.into_make_service())
         .await
         .wrap_err("failed to bind to given address")
+}
+
+async fn health(State(database): State<Database>) -> String {
+    let mut string = String::from("Self: OK");
+
+    match database.health().await {
+        Ok(()) => {
+            write!(string, "\nDatabase: OK").unwrap();
+        }
+        Err(error) => {
+            error!(?error, "database health check failed");
+
+            write!(string, "\nDatabase: Unhealthy").unwrap();
+        }
+    }
+
+    string
 }

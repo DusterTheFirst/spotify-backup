@@ -1,0 +1,26 @@
+app = "spotify-backup-database"
+primary_region = "ams"
+
+[env]
+
+[deploy]
+strategy = "rolling"
+
+[mounts]
+source = "database"
+destination = "/data"
+
+[[services]]
+internal_port = 8080
+protocol      = "tcp"
+
+[services.concurrency]
+hard_limit = 25
+soft_limit = 20
+type       = "connections"
+
+[[services.tcp_checks]]
+grace_period  = "1s"
+interval      = "15s"
+restart_limit = 0
+timeout       = "2s"

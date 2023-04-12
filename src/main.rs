@@ -3,16 +3,14 @@
 
 use std::{borrow::Cow, env, net::SocketAddr, path::PathBuf};
 
-use axum::http::{
-    uri::{Authority, Scheme},
-    Uri,
-};
+use axum::http::{uri::Authority, Uri};
 use color_eyre::eyre::Context;
 use serde::Deserialize;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
 mod pages;
 mod router;
+mod database;
 
 pub struct HttpEnvironment {
     bind: SocketAddr,
