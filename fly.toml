@@ -10,7 +10,7 @@ DOMAIN = "backup.spotify.dusterthefirst.com"
 SPOTIFY_CLIENT_ID    = "be256626b1c24fc981ca6ed2c29b012f"
 SPOTIFY_REDIRECT_URI = "https://backup.spotify.dusterthefirst.com/login/spotify"
 
-SURREAL_ENDPOINT="spotify-backup-database.internal"
+SURREAL_ENDPOINT="spotify-backup-database.internal:8080"
 
 [deploy]
 strategy = "canary"
