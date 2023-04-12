@@ -4,10 +4,13 @@ kill_signal = "SIGINT"
 kill_timeout = 5
 
 [env]
-RUST_LOG = "info,tower_http=debug,spotify_backup=debug"
+RUST_LOG = "info,tower_http=debug,spotify_backup=debug,axum::rejection=trace"
+
 BIND = "0.0.0.0:8080"
-HOST = "backup.spotify.dusterthefirst.com"
+DOMAIN = "backup.spotify.dusterthefirst.com"
+
 SPOTIFY_CLIENT_ID = "be256626b1c24fc981ca6ed2c29b012f"
+SPOTIFY_REDIRECT_URI = "https://backup.spotify.dusterthefirst.com/login/spotify"
 
 [deploy]
 strategy = "canary"

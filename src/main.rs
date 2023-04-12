@@ -1,9 +1,12 @@
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_in_result)]
+#![deny(clippy::unwrap_in_result, clippy::unwrap_used)]
 
 use std::{borrow::Cow, env, net::SocketAddr, path::PathBuf};
 
-use axum::http::uri::Authority;
+use axum::http::{
+    uri::{Authority, Scheme},
+    Uri,
+};
 use color_eyre::eyre::Context;
 use serde::Deserialize;
 use tracing_subscriber::{prelude::*, EnvFilter};
@@ -13,13 +16,49 @@ mod router;
 
 pub struct HttpEnvironment {
     bind: SocketAddr,
-    host: Authority,
     static_dir: PathBuf,
+    domain: Authority,
+}
+
+impl HttpEnvironment {
+    fn from_env() -> Self {
+        HttpEnvironment {
+            bind: env::var("BIND")
+                .expect("$BIND should be set")
+                .parse()
+                .expect("$BIND should be a valid SocketAddr"),
+            static_dir: env::var_os("STATIC_DIR")
+                .expect("$STATIC_DIR should be set")
+                .into(),
+            domain: env::var("DOMAIN")
+                .expect("$DOMAIN should be set")
+                .parse::<Authority>()
+                .expect("$DOMAIN should be a valid URI authority"),
+        }
+    }
 }
 
 pub struct SpotifyEnvironment {
-    spotify_client_id: String,
-    spotify_client_secret: String,
+    credentials: rspotify::Credentials,
+    redirect_uri: Uri,
+}
+
+impl SpotifyEnvironment {
+    pub fn from_env() -> Self {
+        SpotifyEnvironment {
+            credentials: rspotify::Credentials {
+                id: env::var("SPOTIFY_CLIENT_ID").expect("$SPOTIFY_CLIENT_ID should be set"),
+                secret: Some(
+                    env::var("SPOTIFY_CLIENT_SECRET")
+                        .expect("$SPOTIFY_CLIENT_SECRET should be set"),
+                ),
+            },
+            redirect_uri: env::var("SPOTIFY_REDIRECT_URI")
+                .expect("$SPOTIFY_REDIRECT_URI should be set")
+                .parse()
+                .expect("$SPOTIFY_REDIRECT_URI should be a valid URI"),
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -64,25 +103,8 @@ fn main() -> Result<(), color_eyre::Report> {
         .build()
         .expect("tokio runtime builder should succeed")
         .block_on(router::router(
-            HttpEnvironment {
-                bind: env::var("BIND")
-                    .expect("$BIND should be set")
-                    .parse()
-                    .expect("$BIND should be a valid SocketAddr"),
-                host: env::var("HOST")
-                    .expect("$HOST should be set")
-                    .parse()
-                    .expect("$HOST should be a valid URI authority"),
-                static_dir: env::var_os("STATIC_DIR")
-                    .expect("$STATIC_DIR should be set")
-                    .into(),
-            },
-            SpotifyEnvironment {
-                spotify_client_id: env::var("SPOTIFY_CLIENT_ID")
-                    .expect("$SPOTIFY_CLIENT_ID should be set"),
-                spotify_client_secret: env::var("SPOTIFY_CLIENT_SECRET")
-                    .expect("$SPOTIFY_CLIENT_SECRET should be set"),
-            },
+            HttpEnvironment::from_env(),
+            SpotifyEnvironment::from_env(),
             GithubEnvironment {},
         ))
 }

@@ -3,11 +3,7 @@ use std::convert::Infallible;
 use axum::{
     body::{Body, BoxBody},
     extract::{FromRequestParts, Host, State},
-    http::{
-        request,
-        uri::{self, Authority, Scheme},
-        Request, Uri,
-    },
+    http::{request, uri::Authority, Request, Uri},
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
     Extension, RequestPartsExt,
@@ -22,34 +18,24 @@ pub mod catch_panic;
 pub mod trace;
 
 pub async fn redirect_to_domain(
-    State(expected_host): State<Authority>,
-    Host(host): Host,
+    State(domain): State<Authority>,
+    Host(hostname): Host,
     req: Request<Body>,
     next: Next<Body>,
 ) -> Response<BoxBody> {
-    if host == expected_host.as_ref() {
+    if hostname == domain {
         next.run(req).await
     } else {
-        trace_span!("redirect_to_domain", %expected_host, %host).in_scope(|| {
-            let mut parts = uri::Parts::default();
+        trace_span!("redirect_to_domain", ?domain, %hostname).in_scope(|| {
             // Inherit path and query from request
-            parts.path_and_query = req.uri().path_and_query().cloned();
+            let mut parts = req.uri().clone().into_parts();
+            parts.authority = Some(domain);
 
-            parts.authority = Some(expected_host);
-            parts.scheme = Some(if cfg!(debug_assertions) {
-                Scheme::HTTP
-            } else {
-                Scheme::HTTPS
-            });
+            trace!("URI authority did not match configured DOMAIN");
 
-            trace!("URI authority did not match configured HOST");
+            let uri = Uri::from_parts(parts).expect("redirect URI should be a valid URI");
 
-            Redirect::permanent(
-                &Uri::from_parts(parts)
-                    .expect("redirect uri should be a valid uri")
-                    .to_string(),
-            )
-            .into_response()
+            Redirect::permanent(&uri.to_string()).into_response()
         })
     }
 }

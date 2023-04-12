@@ -1,6 +1,11 @@
-use axum::{async_trait, extract::FromRequestParts, http::request, response::Redirect};
+use axum::{
+    async_trait,
+    extract::{FromRequestParts, State},
+    http::request,
+    response::Redirect,
+};
 
-pub async fn login_spotify() -> Redirect {
+pub async fn login_spotify(State(spotify_credentials): State<rspotify::Credentials>) -> Redirect {
     Redirect::to("/")
 }
 

@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use axum::{http::header, response::Redirect, routing::get, Router};
 use color_eyre::eyre::Context;
+use rspotify::scopes;
 use tower_http::{
     cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir, timeout::TimeoutLayer,
     trace::TraceLayer, ServiceBuilderExt,
@@ -27,17 +28,23 @@ pub async fn router(
     spotify: SpotifyEnvironment,
     github: GithubEnvironment,
 ) -> color_eyre::Result<()> {
-    let rspotify_credentials =
-        rspotify::Credentials::new(&spotify.spotify_client_id, &spotify.spotify_client_secret);
+    let rspotify_oauth = rspotify::OAuth {
+        redirect_uri: spotify.redirect_uri.to_string(),
+        scopes: scopes!(),
+        ..Default::default()
+    };
 
     let app = Router::new()
         .route("/", get(pages::dashboard))
         .route("/login", get(pages::login))
-        .route("/login/spotify", get(authentication::login_spotify))
+        .route(
+            "/login/spotify",
+            get(authentication::login_spotify).with_state(spotify.credentials),
+        )
         .route("/login/github", get(authentication::login_github))
         // TODO: Image resizing/optimization
         .route("/favicon.ico", get(favicon))
-        .route("/healthy", get(|| async { "OK" }))
+        .route("/health", get(|| async { "OK" }))
         .nest_service(
             "/static",
             ServeDir::new(http.static_dir)
@@ -70,14 +77,14 @@ pub async fn router(
                         .allow_headers([])
                         .allow_methods([])
                         .allow_origin([http
-                            .host
+                            .domain
                             .as_str()
                             .parse()
-                            .expect("HOST should be a valid HeaderValue")]),
+                            .expect("a URI should be a valid HeaderValue")]),
                 )
                 // Redirect requests that are not to the configured domain
                 .layer(axum::middleware::from_fn_with_state(
-                    http.host,
+                    http.domain,
                     middleware::redirect_to_domain,
                 ))
                 // Catch Panics in handlers
