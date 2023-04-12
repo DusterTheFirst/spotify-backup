@@ -8,9 +8,9 @@ use color_eyre::eyre::Context;
 use serde::Deserialize;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
+mod database;
 mod pages;
 mod router;
-mod database;
 
 pub struct HttpEnvironment {
     bind: SocketAddr,
@@ -73,13 +73,10 @@ fn main() -> Result<(), color_eyre::Report> {
         .with(sentry::integrations::tracing::layer())
         .init();
 
-    let sentry_dsn = env::var("SENTRY_DSN")
-        .expect("$SENTRY_DSN must be set")
-        .parse()
-        .wrap_err("SENTRY_DSN should be a valid DSN")?;
-
     let _guard = sentry::init(sentry::ClientOptions {
-        dsn: Some(sentry_dsn),
+        dsn: env::var("SENTRY_DSN")
+            .ok()
+            .map(|dsn| dsn.parse().expect("SENTRY_DSN should be a valid DSN")),
         // TODO: setup release tracking
         release: Some(git_version::git_version!(args = ["--always", "--abbrev=40"]).into()), // sentry::release_name!(), // TODO: use git hash?
         sample_rate: 1.0,
