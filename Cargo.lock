@@ -2627,6 +2627,7 @@ dependencies = [
  "sentry",
  "serde",
  "sqlx",
+ "thiserror",
  "tokio",
  "tower",
  "tower-http",

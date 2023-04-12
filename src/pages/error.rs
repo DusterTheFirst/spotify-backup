@@ -111,21 +111,22 @@ fn error<'a>(
                 nav {
                     a { href: "/", "return home" }
                 },
-                footer {
-                    section {
-                        h4 { "Request ID" }
-                        code { request_meta.request_id }
-                    }
-                    section {
-                        h4 { "Region" }
-                        request_meta.region
-                    }
-                    section {
-                        h4 { "Server" }
-                        code { "{request_meta.server.name} {request_meta.server.version}" }
-                        code { "(commit " a { href:request_meta.server.source, target:"_blank", request_meta.server.commit } ")" }
-                    }
-                },
+                // TODO: what do with?
+                // footer {
+                //     section {
+                //         h4 { "Request ID" }
+                //         code { request_meta.request_id }
+                //     }
+                //     section {
+                //         h4 { "Region" }
+                //         request_meta.region
+                //     }
+                //     section {
+                //         h4 { "Server" }
+                //         code { "{request_meta.server.name} {request_meta.server.version}" }
+                //         code { "(commit " a { href:request_meta.server.source, target:"_blank", request_meta.server.commit } ")" }
+                //     }
+                // },
             },
         },
     )

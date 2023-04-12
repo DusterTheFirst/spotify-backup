@@ -17,3 +17,14 @@ body {
 pre {
     text-align: left;
 }
+
+footer {
+	display: flex;
+	justify-content: space-between;
+    flex-flow: row;
+
+	width: auto;
+
+	gap: 2em;
+	margin-top: 4em;
+}

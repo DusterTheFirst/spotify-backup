@@ -38,6 +38,7 @@ impl HttpEnvironment {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct SpotifyEnvironment {
     credentials: rspotify::Credentials,
     redirect_uri: Uri,

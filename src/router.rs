@@ -28,18 +28,12 @@ pub async fn router(
     spotify: SpotifyEnvironment,
     github: GithubEnvironment,
 ) -> color_eyre::Result<()> {
-    let rspotify_oauth = rspotify::OAuth {
-        redirect_uri: spotify.redirect_uri.to_string(),
-        scopes: scopes!("playlist-read-private", "user-library-read"),
-        ..Default::default()
-    };
-
     let app = Router::new()
         .route("/", get(pages::dashboard))
         .route("/login", get(pages::login))
         .route(
             "/login/spotify",
-            get(authentication::login_spotify).with_state(spotify.credentials),
+            get(authentication::login_spotify).with_state(spotify),
         )
         .route("/login/github", get(authentication::login_github))
         // TODO: Image resizing/optimization
