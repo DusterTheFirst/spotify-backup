@@ -16,7 +16,7 @@ use axum::{
 use futures::{Future, FutureExt};
 use tracing_error::SpanTrace;
 
-use super::RequestMetadata;
+use super::request_metadata::RequestMetadata;
 
 #[derive(Debug)]
 pub struct CaughtPanic {

@@ -20,6 +20,7 @@ use super::{GithubEnvironment, HttpEnvironment, SpotifyEnvironment};
 pub mod authentication;
 pub mod error;
 pub mod middleware;
+pub mod session;
 
 pub async fn favicon() -> Redirect {
     Redirect::to("/static/branding/logo@192.png")
@@ -42,7 +43,7 @@ pub async fn router(
         .route("/login/github", get(authentication::login_github))
         // TODO: Image resizing/optimization
         .route("/favicon.ico", get(favicon))
-        .route("/health", get(health).with_state(database))
+        .route("/health", get(health).with_state(database.clone()))
         .nest_service(
             "/static",
             ServeDir::new(http.static_dir)
@@ -57,6 +58,11 @@ pub async fn router(
                 // Give a unique identifier to every request
                 .propagate_x_request_id()
                 .set_x_request_id(MakeRequestUuid) // TODO: USE
+                // Create and track a user session
+                .layer(axum::middleware::from_fn_with_state(
+                    database,
+                    session::user_session,
+                ))
                 // Trace requests and responses
                 .layer(TraceLayer::new_for_http().make_span_with(SpanMaker)) // TODO: configure
                 // Send traces to sentry
@@ -83,7 +89,7 @@ pub async fn router(
                 // Redirect requests that are not to the configured domain
                 .layer(axum::middleware::from_fn_with_state(
                     http.domain,
-                    middleware::redirect_to_domain,
+                    middleware::redirect::redirect_to_domain,
                 ))
                 // Catch Panics in handlers
                 .layer(catch_panic_layer(error::internal_server_error_panic)),
@@ -99,7 +105,7 @@ pub async fn router(
 async fn health(State(database): State<Database>) -> String {
     let mut string = String::from("Self: OK");
 
-    match database.health().await {
+    match database.healthy().await {
         Ok(()) => {
             write!(string, "\nDatabase: OK").unwrap();
         }

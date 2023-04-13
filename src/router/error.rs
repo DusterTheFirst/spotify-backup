@@ -9,7 +9,7 @@ use tracing::error;
 
 use crate::pages;
 
-use super::middleware::{catch_panic::CaughtPanic, RequestMetadata};
+use super::middleware::{catch_panic::CaughtPanic, request_metadata::RequestMetadata};
 
 #[tracing::instrument(level = "trace", skip(request_metadata))]
 pub async fn not_found(

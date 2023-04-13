@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use crate::router::middleware::{catch_panic::CaughtPanic, RequestMetadata};
+use crate::router::middleware::{catch_panic::CaughtPanic, request_metadata::RequestMetadata};
 
 use super::Page;
 

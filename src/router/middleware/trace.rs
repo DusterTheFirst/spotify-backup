@@ -18,6 +18,6 @@ impl<B> MakeSpan<B> for SpanMaker {
             .to_str()
             .expect("request id should be valid utf-8");
 
-        debug_span!("request", %method, %uri, ?version, %id)
+        debug_span!(target: "spotify_backup", "request", %method, %uri, ?version, %id)
     }
 }

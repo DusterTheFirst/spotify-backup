@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::unwrap_in_result, clippy::unwrap_used)]
+#![allow(clippy::new_without_default)]
 
 use std::{borrow::Cow, env, net::SocketAddr, path::PathBuf};
 
 use axum::http::{uri::Authority, Uri};
-use color_eyre::eyre::Context;
 use serde::Deserialize;
 use tracing_subscriber::{prelude::*, EnvFilter};
 

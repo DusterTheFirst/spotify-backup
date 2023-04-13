@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use axum::{
     extract::{Query, State},
     response::{IntoResponse, Redirect},
@@ -9,12 +7,17 @@ use rspotify::{
     prelude::{Id, OAuthClient},
     scopes, AuthCodeSpotify,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use thiserror::Error;
 use tracing::{debug, info, trace};
 
-use super::super::middleware::RequestMetadata;
-use crate::{database::Database, pages, SpotifyEnvironment};
+use super::super::middleware::request_metadata::RequestMetadata;
+use crate::{
+    database::{Database, SpotifyId, SpotifyToken},
+    pages,
+    router::session::UserSession,
+    SpotifyEnvironment,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -27,15 +30,6 @@ pub enum SpotifyAuthCodeResponse {
 pub enum SpotifyLoginError {
     #[error("spotify authentication did not succeed: {error}")]
     AuthCodeRedirectFailure { error: String },
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct SpotifyToken {
-    access_token: String,
-    #[serde(with = "time::serde::timestamp")]
-    expires_at: time::OffsetDateTime,
-    refresh_token: String,
-    scopes: HashSet<String>,
 }
 
 impl SpotifyToken {
@@ -59,6 +53,7 @@ impl SpotifyToken {
 
 pub async fn login(
     State((spotify, database)): State<(SpotifyEnvironment, Database)>,
+    session: UserSession,
     request_metadata: RequestMetadata,
     query: Option<Query<SpotifyAuthCodeResponse>>,
 ) -> Result<Redirect, impl IntoResponse> {
@@ -105,36 +100,40 @@ pub async fn login(
                     token.clone().expect("spotify client token should exist"),
                 );
 
-                let created: SpotifyToken = database
-                    .update(("spotify_authentication", user.id.id()))
-                    .content(token)
+                let spotify_id = SpotifyId::from_raw(user.id.id());
+
+                dbg!(&spotify_id);
+
+                let created = database
+                    .set_user_authentication(spotify_id, token)
                     .await
                     .wrap_err("failed to update into database")
                     .map_err(|error| pages::dyn_error(error.as_ref(), &request_metadata))?;
 
-                dbg!(created);
+                dbg!(&created);
+
+                let account = database.get_or_create_account_by_spotify(created.id).await;
+
+                dbg!(account);
 
                 return Ok(Redirect::to("/"));
             }
         }
     }
 
-    // TODO: sessions
-    let authentication: Option<SpotifyToken> = database
-        .select(("spotify_authentication", "dusterthefirst"))
-        .await
-        .wrap_err("failed to select into database")
-        .map_err(|error| pages::dyn_error(error.as_ref(), &request_metadata))?;
+    // TODO: sessions, merge logged-in path with logging in path
+    // let authentication: Option<SpotifyToken> = database
+    //     .get_user_authentication("dusterthefirst")
+    //     .await
+    //     .wrap_err("failed to select into database")
+    //     .map_err(|error| pages::dyn_error(error.as_ref(), &request_metadata))?;
 
-    if let Some(authentication) = authentication {
-        // TODO: verify the credentials
-        info!(
-            ?authentication,
-            "user attempted to re-login with existing credentials"
-        );
+    // if let Some(authentication) = authentication {
+    //     // TODO: verify the credentials
+    //     info!("user attempted to re-login with existing credentials");
 
-        return Ok(Redirect::to("/already/logged/in"));
-    }
+    //     return Ok(Redirect::to("/already/logged/in"));
+    // }
 
     // TODO: distinguish return users?
     let auth_url = auth

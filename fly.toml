@@ -2,7 +2,7 @@ app = "spotify-backup"
 primary_region = "ams"
 
 [env]
-RUST_LOG = "info,tower_http=debug,spotify_backup=debug,axum::rejection=trace"
+RUST_LOG = "info,tower_http=debug,spotify_backup=debug,axum::rejection=trace,rspotify=warn"
 
 BIND   = "[::]:8080"
 DOMAIN = "backup.spotify.dusterthefirst.com"
