@@ -2,7 +2,6 @@ use std::{env, fmt::Debug};
 
 use entity::{account, prelude::*, spotify_auth, user_session};
 use migration::{Migrator, MigratorTrait, OnConflict};
-use rspotify::prelude::Id;
 use sea_orm::{prelude::*, ActiveValue, ConnectOptions, IntoActiveModel, Iterable};
 use time::OffsetDateTime;
 use tracing::info;
@@ -78,6 +77,7 @@ impl Database {
         UserSession::insert(user_session::ActiveModel {
             created: ActiveValue::Set(OffsetDateTime::now_utc()),
             last_seen: ActiveValue::Set(OffsetDateTime::now_utc()),
+            id: ActiveValue::Set(Uuid::new_v4()),
             // TODO: generate UUID?
             ..Default::default()
         })
