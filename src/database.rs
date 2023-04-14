@@ -1,17 +1,11 @@
-use std::{collections::HashSet, env, fmt::Debug};
+use std::{env, fmt::Debug};
 
-use entity::{account, spotify_auth, user_session};
+use entity::{account, prelude::*, spotify_auth, user_session};
 use migration::{Migrator, MigratorTrait, OnConflict};
-use nutype::nutype;
 use rspotify::prelude::Id;
 use sea_orm::{prelude::*, ActiveValue, ConnectOptions, IntoActiveModel, Iterable};
-use serde::{Deserialize, Serialize};
-use time::{OffsetDateTime, PrimitiveDateTime};
+use time::OffsetDateTime;
 use tracing::info;
-
-use crate::router::session::Account;
-
-pub use entity::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct Database {
@@ -39,6 +33,12 @@ impl Database {
 
 #[derive(Debug)]
 pub struct SpotifyId(String);
+
+impl SpotifyId {
+    pub fn from_raw(id: rspotify::model::UserId) -> Self {
+        Self(id.id().to_string())
+    }
+}
 
 impl Database {
     #[tracing::instrument(skip(self))]
@@ -90,44 +90,27 @@ impl Database {
     }
 }
 
+#[derive(Debug)]
+pub struct AccountId(Uuid);
+
 impl Database {
+    #[tracing::instrument(skip(self))]
     pub async fn get_or_create_account_by_spotify(
         &self,
         spotify: SpotifyId,
-    ) -> Result<WithId<PartialAccount, AccountId>, surrealdb::Error> {
-        let mut result = self
-            .connection
-            .query("BEGIN TRANSACTION")
-            // TODO: in some setup I guess
-            .query("DEFINE INDEX account_spotify_unique ON TABLE account COLUMNS spotify UNIQUE")
-            // TODO: first try to fetch existing account by spotify
-            .query("SELECT id FROM account WHERE spotify = $spotify")
-            .query("CREATE account SET spotify = $spotify")
-            .query("COMMIT TRANSACTION")
-            .bind(("spotify", spotify))
-            .await?;
-
-        dbg!(result);
-
-        // result.take(index)
-
-        Ok(todo!())
-    }
-
-    #[tracing::instrument(skip(self))]
-    pub async fn set_account_spotify_id(
-        &self,
-        account: AccountId,
-        spotify: SpotifyId,
-    ) -> Result<(), surrealdb::Error> {
-        self.connection
-            .update::<Option<PartialAccount>>(account)
-            .merge(PartialAccount {
-                spotify: Some(spotify),
-                github: None,
+    ) -> Result<account::Model, DbErr> {
+        dbg!(
+            Account::insert(account::ActiveModel {
+                spotify: ActiveValue::Set(Some(spotify.0)),
+                ..Default::default()
             })
-            .await?;
-
-        Ok(())
+            .on_conflict(
+                OnConflict::column(account::Column::Spotify)
+                    .update_column(account::Column::Spotify)
+                    .to_owned(),
+            )
+            .exec_with_returning(&self.connection)
+            .await
+        )
     }
 }

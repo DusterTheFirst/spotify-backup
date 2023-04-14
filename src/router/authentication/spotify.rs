@@ -9,14 +9,13 @@ use rspotify::{
 };
 use serde::Deserialize;
 use thiserror::Error;
+use time::OffsetDateTime;
 use tracing::{debug, info, trace};
 
 use super::super::middleware::request_metadata::RequestMetadata;
 use crate::{
-    database::{Database, SpotifyId, SpotifyToken},
-    pages,
-    router::session::UserSession,
-    SpotifyEnvironment,
+    database::{Database, SpotifyId},
+    pages, SpotifyEnvironment,
 };
 
 #[derive(Debug, Deserialize)]
@@ -32,22 +31,25 @@ pub enum SpotifyLoginError {
     AuthCodeRedirectFailure { error: String },
 }
 
-impl SpotifyToken {
-    pub fn from_rspotify(token: rspotify::Token) -> Self {
-        Self {
-            access_token: token.access_token,
-            expires_at: time::OffsetDateTime::from_unix_timestamp(
-                token
-                    .expires_at
-                    .expect("rspotify token should have a calculated expiration date")
-                    .timestamp(),
-            )
-            .expect("UNIX timestamp returned from chrono should be valid"),
-            refresh_token: token
-                .refresh_token
-                .expect("rspotify token should contain refresh token"),
-            scopes: token.scopes,
-        }
+pub fn from_rspotify(
+    token: rspotify::Token,
+    user_id: rspotify::model::UserId,
+) -> entity::spotify_auth::Model {
+    entity::spotify_auth::Model {
+        access_token: token.access_token,
+        expires_at: time::OffsetDateTime::from_unix_timestamp(
+            token
+                .expires_at
+                .expect("rspotify token should have a calculated expiration date")
+                .timestamp(),
+        )
+        .expect("UNIX timestamp returned from chrono should be valid"),
+        refresh_token: token
+            .refresh_token
+            .expect("rspotify token should contain refresh token"),
+        scopes: token.scopes.iter().collect(),
+        user_id: user_id.id().to_string(),
+        created: OffsetDateTime::now_utc(),
     }
 }
 
@@ -100,12 +102,12 @@ pub async fn login(
                     token.clone().expect("spotify client token should exist"),
                 );
 
-                let spotify_id = SpotifyId::from_raw(user.id.id());
+                let spotify_id = SpotifyId::from_raw(user.id);
 
                 dbg!(&spotify_id);
 
                 let created = database
-                    .set_user_authentication(spotify_id, token)
+                    .update_user_authentication(spotify_id, token)
                     .await
                     .wrap_err("failed to update into database")
                     .map_err(|error| pages::dyn_error(error.as_ref(), &request_metadata))?;
