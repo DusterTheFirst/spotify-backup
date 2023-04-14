@@ -31,7 +31,7 @@ pub async fn router(
     spotify: SpotifyEnvironment,
     github: GithubEnvironment,
 ) -> color_eyre::Result<()> {
-    let database = database::connect().await;
+    let database = Database::connect().await;
 
     let app = Router::new()
         .route("/", get(pages::dashboard))

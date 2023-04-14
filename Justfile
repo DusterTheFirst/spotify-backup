@@ -1,6 +1,11 @@
 deploy:
     scripts/deploy.sh
 
+genentity: (migrate "fresh")
+    sea-orm-cli generate entity --lib --date-time-crate time --output-dir entity/src
+
+migrate arg="up":
+    sea-orm-cli migrate {{arg}}
+
 rundb:
-    docker build -t spotify-backup-database database/
-    docker run --rm -p 8880:8080/tcp -e SURREAL_USER -e SURREAL_PASS spotify-backup-database
+    docker run --rm -p 5432:5432/tcp -e POSTGRES_USER -e POSTGRES_PASSWORD postgres:15-alpine

@@ -2,5 +2,6 @@
     "cSpell.words": [
         "dotenvy",
         "rspotify"
-    ]
+    ],
+    "rust-analyzer.showUnlinkedFileNotification": false
 }

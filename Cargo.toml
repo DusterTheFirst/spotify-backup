@@ -3,6 +3,10 @@ edition = "2021"
 name    = "spotify-backup"
 version = "0.0.0-prerelease"
 
+[workspace]
+members = ["entity", "migration"]
+resolver = "2"
+
 # [profile.dev.package."*"]
 # opt-level = 2
 
@@ -31,7 +35,9 @@ octocrab = { version = "0.19.0", default-features = false, features = ["rustls",
 rspotify = { version = "0.11.6", default-features = false, features = ["client-reqwest", "reqwest-rustls-tls"] }
 
 # Database
-surrealdb = "1.0.0-beta.9"
+entity    = { path = "entity" }
+migration = { path = "migration" }
+sea-orm   = { version = "0.11.2", features = ["debug-print", "macros", "postgres-array", "runtime-tokio-rustls", "sqlx-postgres", "with-time"] }
 
 # Utility
 const_format = { version = "0.2.30", features = ["rust_1_64"] }

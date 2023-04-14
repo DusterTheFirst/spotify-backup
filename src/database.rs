@@ -1,16 +1,8 @@
 use std::{collections::HashSet, convert::Infallible, env, fmt::Debug};
 
+use migration::Migrator;
+use sea_orm::{ConnectOptions, DatabaseConnection};
 use serde::{Deserialize, Serialize};
-use surrealdb::{
-    engine::remote::ws::{self, Ws},
-    opt::{auth::Root, IntoResource, Resource},
-    sql::{
-        self,
-        statements::{BeginStatement, CommitStatement, CreateStatement},
-        Id, Statement, Table, Thing,
-    },
-    Surreal,
-};
 use time::OffsetDateTime;
 use tracing::info;
 
@@ -18,12 +10,30 @@ use crate::router::session::{Account, UserSession};
 
 #[derive(Debug, Clone)]
 pub struct Database {
-    connection: Surreal<ws::Client>,
+    connection: DatabaseConnection,
+}
+
+impl Database {
+    #[tracing::instrument]
+    pub async fn connect() -> Database {
+        let url = env::var("DATABASE_URL").expect("$DB_ENDPOINT should be set");
+
+        let mut options = ConnectOptions::new(url);
+        options
+            .sqlx_logging(true)
+            .sqlx_logging_level(tracing::log::LevelFilter::Info);
+
+        info!(?url, "connecting to database");
+        let connection: DatabaseConnection = sea_orm::Database::connect(options);
+        Migrator::up(&connection, None).await?;
+
+        Database { connection }
+    }
 }
 
 impl Database {
     #[tracing::instrument(skip(self))]
-    pub async fn healthy(&self) -> Result<(), surrealdb::Error> {
+    pub async fn healthy(&self) -> Result<(), sea_orm::ExecResult> {
         self.connection.health().await
     }
 }
@@ -214,12 +224,11 @@ impl Database {
             // TODO: in some setup I guess
             .query("DEFINE INDEX account_spotify_unique ON TABLE account COLUMNS spotify UNIQUE")
             // TODO: first try to fetch existing account by spotify
-            .query("SELECT * FROM account WHERE spotify = $spotify")
-            .query("UPDATE account SET spotify = $spotify")
+            .query("SELECT id FROM account WHERE spotify = $spotify")
+            .query("CREATE account SET spotify = $spotify")
             .query("COMMIT TRANSACTION")
             .bind(("spotify", spotify))
-            .await?
-            .check()?;
+            .await?;
 
         dbg!(result);
 
@@ -244,32 +253,4 @@ impl Database {
 
         Ok(())
     }
-}
-
-#[tracing::instrument]
-pub async fn connect() -> Database {
-    let endpoint = env::var("SURREAL_ENDPOINT").expect("$SURREAL_ENDPOINT should be set");
-
-    info!(?endpoint, "connecting to database");
-    let connection = Surreal::new::<Ws>(endpoint)
-        .await
-        .expect("database connection should be established");
-
-    info!("signing in to database");
-    connection
-        .signin(Root {
-            username: &env::var("SURREAL_USER").expect("$SURREAL_USER should be set"),
-            password: &env::var("SURREAL_PASS").expect("$SURREAL_PASS should be set"),
-        })
-        .await
-        .expect("provided database credentials should be valid");
-
-    //  FIXME: needed?
-    connection
-        .use_ns("sb")
-        .use_db("sb")
-        .await
-        .expect("namespace and database selection should succeed");
-
-    Database { connection }
 }
