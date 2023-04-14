@@ -31,7 +31,9 @@ pub async fn router(
     spotify: SpotifyEnvironment,
     github: GithubEnvironment,
 ) -> color_eyre::Result<()> {
-    let database = Database::connect().await;
+    let database = Database::connect()
+        .await
+        .wrap_err("failed to setup to database")?;
 
     let app = Router::new()
         .route("/", get(pages::dashboard))
@@ -43,7 +45,7 @@ pub async fn router(
         .route("/login/github", get(authentication::login_github))
         // TODO: Image resizing/optimization
         .route("/favicon.ico", get(favicon))
-        .route("/health", get(health).with_state(database.clone()))
+        .route("/health", get(|| async { "OK" }))
         .nest_service(
             "/static",
             ServeDir::new(http.static_dir)
@@ -100,21 +102,4 @@ pub async fn router(
         .serve(app.into_make_service())
         .await
         .wrap_err("failed to bind to given address")
-}
-
-async fn health(State(database): State<Database>) -> String {
-    let mut string = String::from("Self: OK");
-
-    match database.healthy().await {
-        Ok(()) => {
-            write!(string, "\nDatabase: OK").unwrap();
-        }
-        Err(error) => {
-            error!(?error, "database health check failed");
-
-            write!(string, "\nDatabase: Unhealthy").unwrap();
-        }
-    }
-
-    string
 }

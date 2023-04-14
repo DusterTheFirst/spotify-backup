@@ -31,12 +31,16 @@ impl Database {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SpotifyId(String);
 
 impl SpotifyId {
-    pub fn from_raw(id: rspotify::model::UserId) -> Self {
-        Self(id.id().to_string())
+    pub fn from_raw(id: String) -> Self {
+        Self(id)
+    }
+
+    pub fn into_raw(self) -> String {
+        self.0
     }
 }
 
@@ -60,6 +64,12 @@ impl Database {
 
 #[derive(Debug)]
 pub struct UserSessionId(Uuid);
+
+impl UserSessionId {
+    pub fn from_raw(id: Uuid) -> Self {
+        Self(id)
+    }
+}
 
 impl Database {
     // TODO: session pruning periodically

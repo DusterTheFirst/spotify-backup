@@ -9,7 +9,7 @@ pub struct Model {
     pub id: Uuid,
     pub created: TimeDateTimeWithTimeZone,
     pub last_seen: TimeDateTimeWithTimeZone,
-    pub account: Uuid,
+    pub account: Option<Uuid>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

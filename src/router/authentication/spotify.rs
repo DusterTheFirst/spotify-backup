@@ -15,7 +15,9 @@ use tracing::{debug, info, trace};
 use super::super::middleware::request_metadata::RequestMetadata;
 use crate::{
     database::{Database, SpotifyId},
-    pages, SpotifyEnvironment,
+    pages,
+    router::session::UserSession,
+    SpotifyEnvironment,
 };
 
 #[derive(Debug, Deserialize)]
@@ -31,10 +33,7 @@ pub enum SpotifyLoginError {
     AuthCodeRedirectFailure { error: String },
 }
 
-pub fn from_rspotify(
-    token: rspotify::Token,
-    user_id: rspotify::model::UserId,
-) -> entity::spotify_auth::Model {
+pub fn from_rspotify(token: rspotify::Token, user_id: SpotifyId) -> entity::spotify_auth::Model {
     entity::spotify_auth::Model {
         access_token: token.access_token,
         expires_at: time::OffsetDateTime::from_unix_timestamp(
@@ -47,8 +46,8 @@ pub fn from_rspotify(
         refresh_token: token
             .refresh_token
             .expect("rspotify token should contain refresh token"),
-        scopes: token.scopes.iter().collect(),
-        user_id: user_id.id().to_string(),
+        scopes: token.scopes.into_iter().collect(),
+        user_id: user_id.into_raw(),
         created: OffsetDateTime::now_utc(),
     }
 }
@@ -98,13 +97,14 @@ pub async fn login(
                     .await
                     .expect("spotify client token mutex should not be poisoned");
 
-                let token = SpotifyToken::from_rspotify(
+                let spotify_id = SpotifyId::from_raw(user.id.id().to_string());
+
+                let token = from_rspotify(
                     token.clone().expect("spotify client token should exist"),
+                    spotify_id.clone(),
                 );
 
-                let spotify_id = SpotifyId::from_raw(user.id);
-
-                dbg!(&spotify_id);
+                dbg!(&token);
 
                 let created = database
                     .update_user_authentication(spotify_id, token)
@@ -114,7 +114,9 @@ pub async fn login(
 
                 dbg!(&created);
 
-                let account = database.get_or_create_account_by_spotify(created.id).await;
+                let spotify_id = SpotifyId::from_raw(created.user_id);
+
+                let account = database.get_or_create_account_by_spotify(spotify_id).await;
 
                 dbg!(account);
 

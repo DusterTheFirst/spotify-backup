@@ -9,12 +9,11 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
+use sea_orm::IntoActiveModel;
 use tracing::{debug, trace, Instrument};
 
 use crate::{
-    database::{Database, SpotifyId},
+    database::{Database, UserSessionId},
     pages,
 };
 
@@ -29,20 +28,27 @@ pub async fn user_session(
 ) -> Result<Response<BoxBody>, Response<BoxBody>> {
     const SESSION_COOKIE: &str = "spotify-backup-session";
 
-    if let Some(session) = cookies.get(SESSION_COOKIE) {
+    if let Some(session_uuid) = cookies
+        .get(SESSION_COOKIE)
+        .and_then(|session| session.value().parse().ok())
+    {
         let session = database
-            .get_user_session(UserSessionId::from_raw(session.value()))
+            .get_user_session(UserSessionId::from_raw(session_uuid))
             .await
             .map_err(|error| pages::dyn_error(&error, &request_meta).into_response())?;
 
-        if let Some(session) = session {
-            trace!(?session.id, "existing user, found session");
+        if let Some((session, account)) = session {
+            let session_id = session.id;
+            trace!(?session_id, "existing user, found session");
 
-            req.extensions_mut().insert(session.data);
+            req.extensions_mut().insert(UserSession(
+                session.into_active_model(),
+                account.map(entity::account::Model::into_active_model),
+            ));
 
             let inner = next
             .run(req)
-            .instrument(tracing::debug_span!(target: "spotify_backup", "session::existing", ?session.id))
+            .instrument(tracing::debug_span!(target: "spotify_backup", "session::existing", ?session_id))
             .await;
 
             return Ok(inner);
@@ -56,10 +62,11 @@ pub async fn user_session(
         .await
         .map_err(|error| pages::dyn_error(&error, &request_meta).into_response())?;
 
-    debug!(?session.id, "new user, created session");
+    let session_id = session.id;
+    debug!(?session_id, "new user, created session");
 
     let new_cookie = cookies.add(
-        Cookie::build(SESSION_COOKIE, session.id.to_raw())
+        Cookie::build(SESSION_COOKIE, session.id.to_string())
             .path("/")
             .same_site(SameSite::Lax)
             .secure(true)
@@ -67,28 +74,22 @@ pub async fn user_session(
             .finish(),
     );
 
-    req.extensions_mut().insert(session.data);
+    req.extensions_mut()
+        .insert(UserSession(session.into_active_model(), None));
 
     let inner = next
         .run(req)
-        .instrument(tracing::debug_span!(target: "spotify_backup", "session::new", ?session.id))
+        .instrument(tracing::debug_span!(target: "spotify_backup", "session::new", ?session_id))
         .await;
 
     Ok((new_cookie, inner).into_response())
 }
 
-impl UserSession {
-    pub fn new() -> Self {
-        UserSession {
-            account: None,
-            last_seen: OffsetDateTime::now_utc(),
-        }
-    }
-
-    pub fn last_seen(&self) -> OffsetDateTime {
-        self.last_seen
-    }
-}
+#[derive(Debug, Clone)]
+pub struct UserSession(
+    entity::user_session::ActiveModel,
+    Option<entity::account::ActiveModel>,
+);
 
 #[async_trait]
 impl<S> FromRequestParts<S> for UserSession {
@@ -104,10 +105,4 @@ impl<S> FromRequestParts<S> for UserSession {
             .expect("session middleware should add UserSession extension")
             .clone())
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Account {
-    pub spotify: SpotifyId,
-    pub github: GithubId,
 }
