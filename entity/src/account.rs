@@ -9,7 +9,7 @@ pub struct Model {
     pub id: Uuid,
     pub spotify: Option<String>,
     pub github: Option<String>,
-    pub created: TimeDateTime,
+    pub created: TimeDateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

@@ -14,7 +14,7 @@ use time::OffsetDateTime;
 use tracing::{debug, trace, Instrument};
 
 use crate::{
-    database::{AccountId, Database, GithubId, SpotifyId, UserSessionId},
+    database::{Database, SpotifyId},
     pages,
 };
 
@@ -75,13 +75,6 @@ pub async fn user_session(
         .await;
 
     Ok((new_cookie, inner).into_response())
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UserSession {
-    account: Option<AccountId>,
-    #[serde(with = "time::serde::timestamp")]
-    last_seen: OffsetDateTime,
 }
 
 impl UserSession {

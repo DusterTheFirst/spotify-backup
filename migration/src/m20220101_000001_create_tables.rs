@@ -20,10 +20,14 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(SpotifyAuth::AccessToken).string().not_null())
                     .col(
                         ColumnDef::new(SpotifyAuth::ExpiresAt)
-                            .date_time()
+                            .timestamp_with_time_zone()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(SpotifyAuth::Created).date_time().not_null())
+                    .col(
+                        ColumnDef::new(SpotifyAuth::Created)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
                     .col(
                         ColumnDef::new(SpotifyAuth::RefreshToken)
                             .string()
@@ -50,8 +54,16 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(ColumnDef::new(GithubAuth::AccessToken).string().not_null())
-                    .col(ColumnDef::new(GithubAuth::ExpiresAt).date_time().not_null())
-                    .col(ColumnDef::new(GithubAuth::Created).date_time().not_null())
+                    .col(
+                        ColumnDef::new(GithubAuth::ExpiresAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(GithubAuth::Created)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(GithubAuth::RefreshToken).string().not_null())
                     .col(
                         ColumnDef::new(GithubAuth::Scopes)
@@ -84,7 +96,11 @@ impl MigrationTrait for Migration {
                             .on_delete(ForeignKeyAction::SetNull)
                             .on_update(ForeignKeyAction::Cascade),
                     )
-                    .col(ColumnDef::new(Account::Created).date_time().not_null())
+                    .col(
+                        ColumnDef::new(Account::Created)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
                     .to_owned(),
             )
             .await?;
@@ -120,8 +136,16 @@ impl MigrationTrait for Migration {
                             .uuid()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(UserSession::Created).date_time().not_null())
-                    .col(ColumnDef::new(UserSession::LastSeen).date_time().not_null())
+                    .col(
+                        ColumnDef::new(UserSession::Created)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(UserSession::LastSeen)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
                     .col(ColumnDef::new(UserSession::Account).uuid().not_null())
                     .foreign_key(
                         ForeignKey::create()
