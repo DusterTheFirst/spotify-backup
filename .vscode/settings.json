@@ -1,7 +1,8 @@
 {
     "cSpell.words": [
         "dotenvy",
-        "rspotify"
+        "rspotify",
+        "sqlx"
     ],
     "rust-analyzer.showUnlinkedFileNotification": false
 }

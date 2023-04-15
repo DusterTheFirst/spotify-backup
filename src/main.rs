@@ -80,7 +80,7 @@ fn main() -> Result<(), color_eyre::Report> {
         // TODO: setup release tracking
         release: Some(git_version::git_version!(args = ["--always", "--abbrev=40"]).into()), // sentry::release_name!(), // TODO: use git hash?
         sample_rate: 1.0,
-        traces_sample_rate: 0.0, // TODO: make not 0, but also not spammy
+        traces_sample_rate: 0.0, // TODO: make not 0, but also not spam
         enable_profiling: true,
         profiles_sample_rate: 1.0,
         attach_stacktrace: true,

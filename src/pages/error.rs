@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 pub fn not_found(path: &str, request_meta: &RequestMetadata) -> Response {
     error(
         StatusCode::NOT_FOUND,
-        &request_meta,
+        request_meta,
         rsx! {
             div {
                 code { path }
@@ -57,7 +57,7 @@ pub fn dyn_error(error: &dyn Error, request_meta: &RequestMetadata) -> impl Into
 pub fn panic_error(panic_info: CaughtPanic, request_meta: &RequestMetadata) -> impl IntoResponse {
     error(
         StatusCode::INTERNAL_SERVER_ERROR,
-        &request_meta,
+        request_meta,
         if cfg!(debug_assertions) {
             rsx! {
                 div { "The application panicked." }

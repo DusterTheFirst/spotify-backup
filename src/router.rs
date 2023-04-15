@@ -1,19 +1,16 @@
-use std::{fmt::Write, time::Duration};
+use std::time::Duration;
 
-use axum::{extract::State, http::header, response::Redirect, routing::get, Router};
+use axum::{http::header, response::Redirect, routing::get, Router};
 use color_eyre::eyre::Context;
 use tower_http::{
     cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir, timeout::TimeoutLayer,
     trace::TraceLayer, ServiceBuilderExt,
 };
-use tracing::{debug, error};
+use tracing::debug;
 
 use middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};
 
-use crate::{
-    database::{self, Database},
-    pages,
-};
+use crate::{database::Database, pages};
 
 use super::{GithubEnvironment, HttpEnvironment, SpotifyEnvironment};
 

@@ -41,10 +41,8 @@ pub async fn user_session(
             let session_id = session.id;
             trace!(?session_id, "existing user, found session");
 
-            req.extensions_mut().insert(UserSession(
-                session.into_active_model(),
-                account.map(entity::account::Model::into_active_model),
-            ));
+            req.extensions_mut()
+                .insert(UserSession { session, account });
 
             let inner = next
             .run(req)
@@ -74,8 +72,10 @@ pub async fn user_session(
             .finish(),
     );
 
-    req.extensions_mut()
-        .insert(UserSession(session.into_active_model(), None));
+    req.extensions_mut().insert(UserSession {
+        session,
+        account: None,
+    });
 
     let inner = next
         .run(req)
@@ -86,10 +86,10 @@ pub async fn user_session(
 }
 
 #[derive(Debug, Clone)]
-pub struct UserSession(
-    entity::user_session::ActiveModel,
-    Option<entity::account::ActiveModel>,
-);
+pub struct UserSession {
+    pub session: entity::user_session::Model,
+    pub account: Option<entity::account::Model>,
+}
 
 #[async_trait]
 impl<S> FromRequestParts<S> for UserSession {
@@ -97,7 +97,7 @@ impl<S> FromRequestParts<S> for UserSession {
 
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
-        state: &S,
+        _state: &S,
     ) -> Result<Self, Self::Rejection> {
         Ok(parts
             .extensions

@@ -14,7 +14,7 @@ use tracing::{debug, info, trace};
 
 use super::super::middleware::request_metadata::RequestMetadata;
 use crate::{
-    database::{Database, SpotifyId},
+    database::{AccountId, Database, SpotifyId, UserSessionId},
     pages,
     router::session::UserSession,
     SpotifyEnvironment,
@@ -116,9 +116,22 @@ pub async fn login(
 
                 let spotify_id = SpotifyId::from_raw(created.user_id);
 
-                let account = database.get_or_create_account_by_spotify(spotify_id).await;
+                let account = database
+                    .get_or_create_account_by_spotify(spotify_id)
+                    .await
+                    .wrap_err("failed to get spotify account")
+                    .map_err(|error| pages::dyn_error(error.as_ref(), &request_metadata))?;
 
-                dbg!(account);
+                dbg!(&account);
+
+                database
+                    .login_user_session(
+                        UserSessionId::from_raw(session.session.id),
+                        AccountId::from_raw(account.id),
+                    )
+                    .await
+                    .wrap_err("failed to login user session")
+                    .map_err(|error| pages::dyn_error(error.as_ref(), &request_metadata))?;
 
                 return Ok(Redirect::to("/"));
             }

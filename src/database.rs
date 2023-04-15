@@ -2,7 +2,9 @@ use std::{env, fmt::Debug};
 
 use entity::{account, prelude::*, spotify_auth, user_session};
 use migration::{Migrator, MigratorTrait, OnConflict};
-use sea_orm::{prelude::*, ActiveValue, ConnectOptions, IntoActiveModel, Iterable};
+use sea_orm::{
+    prelude::*, ActiveValue, ConnectOptions, IntoActiveModel, IntoActiveValue, Iterable,
+};
 use time::OffsetDateTime;
 use tracing::info;
 
@@ -52,7 +54,7 @@ impl Database {
     ) -> Result<spotify_auth::Model, DbErr> {
         SpotifyAuth::insert(auth.into_active_model())
             .on_conflict(
-                OnConflict::new()
+                OnConflict::column(spotify_auth::Column::UserId)
                     .update_columns(spotify_auth::Column::iter())
                     .to_owned(),
             )
@@ -78,7 +80,6 @@ impl Database {
             created: ActiveValue::Set(OffsetDateTime::now_utc()),
             last_seen: ActiveValue::Set(OffsetDateTime::now_utc()),
             id: ActiveValue::Set(Uuid::new_v4()),
-            // TODO: generate UUID?
             ..Default::default()
         })
         .exec_with_returning(&self.connection)
@@ -98,10 +99,31 @@ impl Database {
         // There should only be one
         Ok(sessions.pop())
     }
+
+    #[tracing::instrument(skip(self))]
+    pub async fn login_user_session(
+        &self,
+        session: UserSessionId,
+        account: AccountId,
+    ) -> Result<user_session::Model, DbErr> {
+        UserSession::update(user_session::ActiveModel {
+            id: ActiveValue::Unchanged(session.0),
+            account: ActiveValue::Set(Some(account.0)),
+            ..Default::default()
+        })
+        .exec(&self.connection)
+        .await
+    }
 }
 
 #[derive(Debug)]
 pub struct AccountId(Uuid);
+
+impl AccountId {
+    pub fn from_raw(id: Uuid) -> Self {
+        Self(id)
+    }
+}
 
 impl Database {
     #[tracing::instrument(skip(self))]
@@ -111,11 +133,14 @@ impl Database {
     ) -> Result<account::Model, DbErr> {
         dbg!(
             Account::insert(account::ActiveModel {
+                id: ActiveValue::Set(Uuid::new_v4()),
                 spotify: ActiveValue::Set(Some(spotify.0)),
+                created: ActiveValue::Set(OffsetDateTime::now_utc()),
                 ..Default::default()
             })
             .on_conflict(
                 OnConflict::column(account::Column::Spotify)
+                    // This should be DO NOTHING, but that would not give the RETURNING clause any data
                     .update_column(account::Column::Spotify)
                     .to_owned(),
             )
