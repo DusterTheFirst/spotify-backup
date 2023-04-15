@@ -19,7 +19,9 @@ use crate::{
 
 use super::middleware::request_metadata::RequestMetadata;
 
-// FIXME: do not keep forever, right now polling /health will spam create sessions
+// FIXME: do not create for every query, right now polling /health will spam create sessions
+//        maybe only create for authenticated users
+// FIXME: session pruning
 pub async fn user_session(
     cookies: CookieJar,
     request_meta: RequestMetadata,
