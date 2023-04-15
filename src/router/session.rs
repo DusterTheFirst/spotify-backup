@@ -9,7 +9,6 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use sea_orm::IntoActiveModel;
 use tracing::{debug, trace, Instrument};
 
 use crate::{

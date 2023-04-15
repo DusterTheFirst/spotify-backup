@@ -1,10 +1,7 @@
 use axum::{
     body::{Body, BoxBody},
     extract::{Host, State},
-    http::{
-        uri::{Authority},
-        Request,
-    },
+    http::{uri::Authority, Request},
     middleware::Next,
     response::{IntoResponse, Redirect, Response},
 };
