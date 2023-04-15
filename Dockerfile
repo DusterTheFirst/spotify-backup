@@ -3,7 +3,7 @@ WORKDIR /app
 ARG DEBIAN_FRONTEND="noninteractive"
 RUN set -eux; \
     apt update; \
-    apt install git-crypt -y
+    apt install git-crypt lld -y
 
 FROM chef AS planner
 COPY . .

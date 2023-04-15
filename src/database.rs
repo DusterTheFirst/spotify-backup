@@ -3,7 +3,7 @@ use std::{env, fmt::Debug};
 use entity::{account, prelude::*, spotify_auth, user_session};
 use migration::{Migrator, MigratorTrait, OnConflict};
 use sea_orm::{
-    prelude::*, ActiveValue, ConnectOptions, IntoActiveModel, IntoActiveValue, Iterable,
+    prelude::*, ActiveValue, ConnectOptions, IntoActiveModel, Iterable,
 };
 use time::OffsetDateTime;
 use tracing::info;

@@ -10,7 +10,7 @@ use rspotify::{
 use serde::Deserialize;
 use thiserror::Error;
 use time::OffsetDateTime;
-use tracing::{debug, info, trace};
+use tracing::{debug, trace};
 
 use super::super::middleware::request_metadata::RequestMetadata;
 use crate::{

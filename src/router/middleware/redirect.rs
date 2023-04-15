@@ -2,8 +2,8 @@ use axum::{
     body::{Body, BoxBody},
     extract::{Host, State},
     http::{
-        uri::{Authority, Scheme},
-        Request, Uri,
+        uri::{Authority},
+        Request,
     },
     middleware::Next,
     response::{IntoResponse, Redirect, Response},

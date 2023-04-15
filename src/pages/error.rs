@@ -32,7 +32,10 @@ fn error_sources(error: &dyn Error) -> Box<dyn Iterator<Item = String>> {
     Box::new(std::iter::empty())
 }
 
+// TODO: way to wrap handlers to always coerce errors to this page?
 pub fn dyn_error(error: &dyn Error, request_meta: &RequestMetadata) -> impl IntoResponse {
+    tracing::error!(%error, "encountered an error serving page");
+
     let sources = error_sources(&error);
     let error = error.to_string();
 
