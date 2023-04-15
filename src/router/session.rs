@@ -19,6 +19,7 @@ use crate::{
 
 use super::middleware::request_metadata::RequestMetadata;
 
+// FIXME: do not keep forever, right now polling /health will spam create sessions
 pub async fn user_session(
     cookies: CookieJar,
     request_meta: RequestMetadata,

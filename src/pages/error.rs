@@ -33,6 +33,8 @@ fn error_sources(error: &dyn Error) -> Box<dyn Iterator<Item = String>> {
 }
 
 // TODO: way to wrap handlers to always coerce errors to this page?
+// FIXME: error traces somehow
+// FIXME: use eyre?
 pub fn dyn_error(error: &dyn Error, request_meta: &RequestMetadata) -> impl IntoResponse {
     tracing::error!(%error, "encountered an error serving page");
 
