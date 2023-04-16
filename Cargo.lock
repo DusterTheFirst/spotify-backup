@@ -2645,7 +2645,6 @@ dependencies = [
  "sea-orm",
  "sentry",
  "serde",
- "thiserror",
  "time 0.3.20",
  "tokio",
  "tower",

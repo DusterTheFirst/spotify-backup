@@ -10,7 +10,9 @@ use tracing::debug;
 
 use middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};
 
-use crate::{database::Database, pages};
+use crate::{
+    database::Database, pages, router::middleware::server_information::StaticServerInformation,
+};
 
 use super::{GithubEnvironment, HttpEnvironment, SpotifyEnvironment};
 
@@ -55,8 +57,8 @@ pub async fn router(
                 // Hide sensitive headers
                 .sensitive_headers([header::AUTHORIZATION, header::COOKIE])
                 // Give a unique identifier to every request
-                .propagate_x_request_id()
                 .set_x_request_id(MakeRequestUuid) // TODO: USE
+                .propagate_x_request_id()
                 // Create and track a user session
                 .layer(axum::middleware::from_fn_with_state(
                     database,
@@ -89,6 +91,10 @@ pub async fn router(
                 .layer(axum::middleware::from_fn_with_state(
                     http.domain,
                     middleware::redirect::redirect_to_domain,
+                ))
+                // Set server information response headers
+                .layer(axum::middleware::from_fn(
+                    StaticServerInformation::middleware,
                 ))
                 // Catch Panics in handlers
                 .layer(catch_panic_layer(error::internal_server_error_panic)),

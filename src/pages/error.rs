@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use crate::router::middleware::{catch_panic::CaughtPanic, request_metadata::RequestMetadata};
+use crate::router::middleware::catch_panic::CaughtPanic;
 
 use super::Page;
 
@@ -10,10 +10,9 @@ use axum::{
 };
 use dioxus::prelude::*;
 
-pub fn not_found(path: &str, request_meta: &RequestMetadata) -> Response {
-    error(
+pub fn not_found(path: &str) -> Response {
+    self::error(
         StatusCode::NOT_FOUND,
-        request_meta,
         rsx! {
             div {
                 code { path }
@@ -32,10 +31,46 @@ fn error_sources(error: &dyn Error) -> Box<dyn Iterator<Item = String>> {
     Box::new(std::iter::empty())
 }
 
+pub struct EyreReport {
+    report: color_eyre::Report,
+}
+
+impl From<color_eyre::Report> for EyreReport {
+    fn from(value: color_eyre::Report) -> Self {
+        Self { report: value }
+    }
+}
+
 // TODO: way to wrap handlers to always coerce errors to this page?
 // FIXME: error traces somehow
 // FIXME: use eyre?
-pub fn dyn_error(error: &dyn Error, request_meta: &RequestMetadata) -> impl IntoResponse {
+impl IntoResponse for EyreReport {
+    fn into_response(self) -> Response {
+        tracing::error!(%self.report, "encountered an error serving a page");
+
+        let sources = error_sources(self.report.as_ref());
+        let error = self.report.to_string();
+
+        self::error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            if cfg!(debug_assertions) {
+                rsx! {
+                    div { error }
+                    ul {
+                        for (i , source) in sources.enumerate() {
+                            li { key: "{i}", source }
+                        }
+                    }
+                }
+            } else {
+                rsx! {""}
+            },
+        )
+        .into_response()
+    }
+}
+
+pub fn dyn_error(error: &dyn Error) -> impl IntoResponse {
     tracing::error!(%error, "encountered an error serving page");
 
     let sources = error_sources(&error);
@@ -43,7 +78,6 @@ pub fn dyn_error(error: &dyn Error, request_meta: &RequestMetadata) -> impl Into
 
     self::error(
         StatusCode::INTERNAL_SERVER_ERROR,
-        request_meta,
         if cfg!(debug_assertions) {
             rsx! {
                 div { error }
@@ -59,10 +93,9 @@ pub fn dyn_error(error: &dyn Error, request_meta: &RequestMetadata) -> impl Into
     )
 }
 
-pub fn panic_error(panic_info: CaughtPanic, request_meta: &RequestMetadata) -> impl IntoResponse {
-    error(
+pub fn panic_error(panic_info: CaughtPanic) -> impl IntoResponse {
+    self::error(
         StatusCode::INTERNAL_SERVER_ERROR,
-        request_meta,
         if cfg!(debug_assertions) {
             rsx! {
                 div { "The application panicked." }
@@ -91,11 +124,7 @@ pub fn panic_error(panic_info: CaughtPanic, request_meta: &RequestMetadata) -> i
     )
 }
 
-fn error<'a>(
-    status: StatusCode,
-    request_meta: &RequestMetadata,
-    body: LazyNodes<'a, 'a>,
-) -> (StatusCode, Page<'a>) {
+fn error<'a>(status: StatusCode, body: LazyNodes<'a, 'a>) -> (StatusCode, Page<'a>) {
     let status_code = status.as_u16();
     let status_reason = status.canonical_reason().unwrap_or("Unknown Error");
 

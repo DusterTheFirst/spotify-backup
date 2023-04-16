@@ -16,8 +16,6 @@ use axum::{
 use futures::{Future, FutureExt};
 use tracing_error::SpanTrace;
 
-use super::request_metadata::RequestMetadata;
-
 #[derive(Debug)]
 pub struct CaughtPanic {
     payload: Box<dyn Any + Send + 'static>,
@@ -137,12 +135,11 @@ pub fn catch_panic_layer<T>(
 
 type CatchPanicFn = fn(
     State<CatchPanicState>,
-    RequestMetadata,
     Request<Body>,
     Next<Body>,
 ) -> Pin<Box<dyn Future<Output = Response<BoxBody>> + Send + 'static>>;
 
-type CatchPanicHandler = fn(RequestMetadata, CaughtPanic) -> Response<BoxBody>;
+type CatchPanicHandler = fn(CaughtPanic) -> Response<BoxBody>;
 
 /// Re-implementation of [`tower_http::catch_panic::CatchPanicLayer`] to allow
 /// for capturing the Request ID for panic handlers as well as other fields from
@@ -152,7 +149,6 @@ fn catch_panic(
         panic_info,
         handler,
     }): State<CatchPanicState>,
-    request_meta: RequestMetadata,
     req: Request<Body>,
     next: Next<Body>,
 ) -> Pin<Box<dyn Future<Output = Response<BoxBody>> + Send + 'static>> {
@@ -172,12 +168,9 @@ fn catch_panic(
             "panic_info should be filled with new panic information by the time catch_panic runs",
         );
 
-        handler(
-            request_meta,
-            CaughtPanic {
-                payload: panic_payload,
-                info: panic_info,
-            },
-        )
+        handler(CaughtPanic {
+            payload: panic_payload,
+            info: panic_info,
+        })
     })
 }

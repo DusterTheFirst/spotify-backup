@@ -9,25 +9,23 @@ use axum::{
     response::IntoResponse,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use color_eyre::eyre::Context;
 use tracing::{debug, trace, Instrument};
 
 use crate::{
     database::{Database, UserSessionId},
-    pages,
+    pages::EyreReport,
 };
-
-use super::middleware::request_metadata::RequestMetadata;
 
 // FIXME: do not create for every query, right now polling /health will spam create sessions
 //        maybe only create for authenticated users
 // FIXME: session pruning
 pub async fn user_session(
     cookies: CookieJar,
-    request_meta: RequestMetadata,
     State(database): State<Database>,
     mut req: Request<Body>,
     next: Next<Body>,
-) -> Result<Response<BoxBody>, Response<BoxBody>> {
+) -> Result<Response<BoxBody>, EyreReport> {
     const SESSION_COOKIE: &str = "spotify-backup-session";
 
     if let Some(session_uuid) = cookies
@@ -37,7 +35,7 @@ pub async fn user_session(
         let session = database
             .get_user_session(UserSessionId::from_raw(session_uuid))
             .await
-            .map_err(|error| pages::dyn_error(&error, &request_meta).into_response())?;
+            .wrap_err("failed to get user session")?;
 
         if let Some((session, account)) = session {
             let session_id = session.id;
@@ -60,7 +58,7 @@ pub async fn user_session(
     let session = database
         .create_user_session()
         .await
-        .map_err(|error| pages::dyn_error(&error, &request_meta).into_response())?;
+        .wrap_err("failed to create user session")?;
 
     let session_id = session.id;
     debug!(?session_id, "new user, created session");
