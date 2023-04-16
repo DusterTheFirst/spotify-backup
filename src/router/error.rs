@@ -26,13 +26,6 @@ pub async fn static_not_found(req: Request<Body>) -> Response {
     )
 }
 
-#[tracing::instrument(level = "trace")]
-pub async fn internal_server_error<E: std::error::Error>(error: E) -> Response {
-    error!(%error, "ServeDir encountered IO error"); // FIXME: not the right message
-
-    pages::dyn_error(&error).into_response()
-}
-
 #[tracing::instrument(level = "trace", skip_all)]
 pub fn internal_server_error_panic(info: CaughtPanic) -> Response {
     if let Some(panic) = info.payload_str() {

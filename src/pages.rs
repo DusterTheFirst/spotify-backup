@@ -10,7 +10,7 @@ mod login;
 
 pub use {
     dashboard::dashboard,
-    error::{dyn_error, not_found, panic_error, EyreReport},
+    error::{not_found, panic_error, EyreReport},
     login::login,
 };
 

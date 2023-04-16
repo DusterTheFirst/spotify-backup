@@ -65,6 +65,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "anes"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
+dependencies = [
+ "bitflags",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -629,6 +638,14 @@ dependencies = [
  "dioxus-core-macro",
  "dioxus-html",
  "dioxus-rsx 0.0.3",
+]
+
+[[package]]
+name = "dioxus-ansi"
+version = "0.1.0"
+dependencies = [
+ "anes",
+ "dioxus",
 ]
 
 [[package]]
@@ -2633,6 +2650,7 @@ dependencies = [
  "color-eyre",
  "const_format",
  "dioxus",
+ "dioxus-ansi",
  "dioxus-ssr",
  "entity",
  "futures",

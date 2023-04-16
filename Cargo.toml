@@ -13,7 +13,7 @@ lto             = "thin"
 overflow-checks = true
 
 [workspace]
-members  = ["entity", "migration"]
+members  = ["crates/*"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -21,12 +21,13 @@ sea-orm = { version = "0.11.2", default-features = false, features = ["debug-pri
 
 [dependencies]
 # Web
-axum       = { version = "0.6.15", features = ["macros", "original-uri", "tracing"] }
-axum-extra = { version = "0.7.3", features = ["cookie"] }
-dioxus     = { version = "0.3.2", default-features = false, features = ["html", "macro"] }
-dioxus-ssr = "0.3.0"
-tower      = { version = "0.4.13" }
-tower-http = { version = "0.4.0", features = ["full"] }
+axum        = { version = "0.6.15", features = ["macros", "original-uri", "tracing"] }
+axum-extra  = { version = "0.7.3", features = ["cookie"] }
+dioxus      = { version = "0.3.2", default-features = false, features = ["html", "macro"] }
+dioxus-ansi = { path = "crates/dioxus-ansi" }
+dioxus-ssr  = "0.3.0"
+tower       = { version = "0.4.13" }
+tower-http  = { version = "0.4.0", features = ["full"] }
 
 # Email
 lettre = { version = "0.10.4", default-features = false, features = ["builder", "hostname", "pool", "smtp-transport", "tokio1-rustls-tls"] }
@@ -38,8 +39,8 @@ octocrab = { version = "0.19.0", default-features = false, features = ["rustls",
 rspotify = { version = "0.11.6", default-features = false, features = ["client-reqwest", "reqwest-rustls-tls"] }
 
 # Database
-entity    = { path = "entity" }
-migration = { path = "migration" }
+entity    = { path = "crates/entity" }
+migration = { path = "crates/migration" }
 sea-orm   = { workspace = true }
 
 # Utility

@@ -1,0 +1,8 @@
+[package]
+edition = "2021"
+name    = "dioxus-ansi"
+version = "0.1.0"
+
+[dependencies]
+anes   = { version = "0.1.6", features = ["parser"] }
+dioxus = { version = "0.3.2", default-features = false, features = ["html", "macro"] }

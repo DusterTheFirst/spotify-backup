@@ -1,14 +1,12 @@
-use std::error::Error;
-
-use crate::router::middleware::catch_panic::CaughtPanic;
-
-use super::Page;
-
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use dioxus::prelude::*;
+
+use crate::router::middleware::catch_panic::{CaughtPanic, Location};
+
+use super::Page;
 
 pub fn not_found(path: &str) -> Response {
     self::error(
@@ -23,21 +21,18 @@ pub fn not_found(path: &str) -> Response {
     .into_response()
 }
 
-fn error_sources(error: &dyn Error) -> Box<dyn Iterator<Item = String>> {
-    if let Some(source) = error.source() {
-        return Box::new(std::iter::once(source.to_string()).chain(error_sources(source)));
-    }
-
-    Box::new(std::iter::empty())
-}
-
 pub struct EyreReport {
     report: color_eyre::Report,
+    caller: Location,
 }
 
 impl From<color_eyre::Report> for EyreReport {
+    #[track_caller]
     fn from(value: color_eyre::Report) -> Self {
-        Self { report: value }
+        Self {
+            report: value,
+            caller: std::panic::Location::caller().into(),
+        }
     }
 }
 
@@ -46,19 +41,29 @@ impl From<color_eyre::Report> for EyreReport {
 // FIXME: use eyre?
 impl IntoResponse for EyreReport {
     fn into_response(self) -> Response {
-        tracing::error!(%self.report, "encountered an error serving a page");
+        let chain = self
+            .report
+            .chain()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>();
 
-        let sources = error_sources(self.report.as_ref());
-        let error = self.report.to_string();
+        tracing::debug!(?chain); // FIXME more better print/log somehow
+        tracing::error!(?self.report, %self.caller, "encountered an error serving a page");
 
         self::error(
             StatusCode::INTERNAL_SERVER_ERROR,
             if cfg!(debug_assertions) {
                 rsx! {
-                    div { error }
+                    code {
+                        pre { "{self.report:?}" }
+                    }
                     ul {
-                        for (i , source) in sources.enumerate() {
-                            li { key: "{i}", source }
+                        for (i , source) in self.report.chain().enumerate() {
+                            li { key: "{i}",
+                                code {
+                                    pre { "{source:#?}" }
+                                }
+                            }
                         }
                     }
                 }
@@ -68,29 +73,6 @@ impl IntoResponse for EyreReport {
         )
         .into_response()
     }
-}
-
-pub fn dyn_error(error: &dyn Error) -> impl IntoResponse {
-    tracing::error!(%error, "encountered an error serving page");
-
-    let sources = error_sources(&error);
-    let error = error.to_string();
-
-    self::error(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        if cfg!(debug_assertions) {
-            rsx! {
-                div { error }
-                ul {
-                    for (i , source) in sources.enumerate() {
-                        li { key: "{i}", source }
-                    }
-                }
-            }
-        } else {
-            rsx! {""}
-        },
-    )
 }
 
 pub fn panic_error(panic_info: CaughtPanic) -> impl IntoResponse {
