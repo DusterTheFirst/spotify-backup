@@ -54,17 +54,21 @@ impl IntoResponse for EyreReport {
             StatusCode::INTERNAL_SERVER_ERROR,
             if cfg!(debug_assertions) {
                 rsx! {
-                    code {
-                        pre { "{self.report:?}" }
-                    }
-                    ul {
-                        for (i , source) in self.report.chain().enumerate() {
-                            li { key: "{i}",
-                                code {
-                                    pre { "{source:#?}" }
-                                }
-                            }
-                        }
+                    // code {
+                    //     pre { "{self.report:?}" }
+                    // }
+                    // ul {
+                    //     for (i , source) in self.report.chain().enumerate() {
+                    //         li { key: "{i}",
+                    //             code {
+                    //                 pre { "{source:#?}" }
+                    //             }
+                    //         }
+                    //     }
+                    // }
+                    dioxus_ansi::preformatted_ansi {
+                        // FIXME: Allocation :(
+                        ansi_text: format!("{:?}", self.report)
                     }
                 }
             } else {

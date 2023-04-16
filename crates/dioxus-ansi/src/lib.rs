@@ -1,39 +1,57 @@
-use core::fmt::{Display, Write};
-
-use anes::parser::Parser;
+use cansi::{Color, Intensity};
 use dioxus::prelude::*;
 
 #[inline_props]
-pub fn preformatted_ansi<'a>(cx: Scope<'a>, text: &'a dyn Display) -> Element<'a> {
-    let mut writer = Writer {
-        parser: anes::parser::Parser::default(),
-    };
-
-    writer.write_fmt(format_args!("{}", text)).throw(cx)?;
+pub fn preformatted_ansi(cx: Scope<'_, Props>, ansi_text: String) -> Element<'_> {
+    let slices = cansi::v3::categorise_text(ansi_text);
 
     cx.render(rsx! {
-        for sequence in writer.parser {
-            "{sequence:?}"
+        pre {
+            style: "background-color: #181818; color: #cccccc;",
+            code {
+                slices.into_iter().map(|slice| {
+                    // TODO: more styling
+                    let color = slice.fg.map(terminal_color_to_hex).unwrap_or("inherit");
+                    let font_weight = slice.intensity.map(intensity_to_css).unwrap_or("inherit");
+
+                    rsx! {
+                        span {
+                            style: "color: {color}; font-weight: {font_weight}",
+                            slice.text
+                        }
+                    }
+                })
+            }
         }
     })
 }
 
-struct Writer {
-    parser: Parser,
+fn terminal_color_to_hex(color: Color) -> &'static str {
+    // Stolen from: https://github.com/microsoft/vscode/blob/1e774371f2ca5f6618b4f40fdc72ce7518443014/src/vs/workbench/contrib/terminal/common/terminalColorRegistry.ts#L161
+    match color {
+        Color::Black => "#000000",         // Light: 000000
+        Color::Red => "#cd3131",           // Light: cd3131
+        Color::Green => "#0dbc79",         // Light: 00bc00
+        Color::Yellow => "#e5e510",        // Light: 949800
+        Color::Blue => "#2472c8",          // Light: 0451a5
+        Color::Magenta => "#bc3fbc",       // Light: bc05bc
+        Color::Cyan => "#11a8cd",          // Light: 0598bc
+        Color::White => "#e5e5e5",         // Light: 555555
+        Color::BrightBlack => "#666666",   // Light: 666666
+        Color::BrightRed => "#f14c4c",     // Light: cd3131
+        Color::BrightGreen => "#23d18b",   // Light: 14ce14
+        Color::BrightYellow => "#f5f543",  // Light: b5ba00
+        Color::BrightBlue => "#3b8eea",    // Light: 0451a5
+        Color::BrightMagenta => "#d670d6", // Light: bc05bc
+        Color::BrightCyan => "#0598bc",    // Light: 29b8db
+        Color::BrightWhite => "#a5a5a5",   // Light: e5e5e5
+    }
 }
 
-impl core::fmt::Write for Writer {
-    fn write_char(&mut self, c: char) -> core::fmt::Result {
-        self.write_str(c.encode_utf8(&mut [0; 4]))
-    }
-
-    fn write_fmt(mut self: &mut Self, args: core::fmt::Arguments<'_>) -> core::fmt::Result {
-        core::fmt::write(&mut self, args)
-    }
-
-    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        self.parser.advance(s.as_bytes(), true);
-
-        Ok(())
+fn intensity_to_css(intensity: Intensity) -> &'static str {
+    match intensity {
+        Intensity::Normal => "normal",
+        Intensity::Bold => "bold",
+        Intensity::Faint => "thin",
     }
 }
