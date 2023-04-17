@@ -21,12 +21,12 @@ pub fn not_found(path: &str) -> Response {
     .into_response()
 }
 
-pub struct EyreReport {
+pub struct ErrorPage {
     report: color_eyre::Report,
     caller: Location,
 }
 
-impl From<color_eyre::Report> for EyreReport {
+impl From<color_eyre::Report> for ErrorPage {
     #[track_caller]
     fn from(value: color_eyre::Report) -> Self {
         Self {
@@ -39,7 +39,7 @@ impl From<color_eyre::Report> for EyreReport {
 // TODO: way to wrap handlers to always coerce errors to this page?
 // FIXME: error traces somehow
 // FIXME: use eyre?
-impl IntoResponse for EyreReport {
+impl IntoResponse for ErrorPage {
     fn into_response(self) -> Response {
         let chain = self
             .report

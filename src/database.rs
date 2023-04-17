@@ -73,13 +73,19 @@ impl UserSessionId {
 impl Database {
     // TODO: session pruning periodically
     #[tracing::instrument(skip(self))]
-    pub async fn create_user_session(&self) -> Result<user_session::Model, DbErr> {
-        UserSession::insert(user_session::ActiveModel {
-            created: ActiveValue::Set(OffsetDateTime::now_utc()),
-            last_seen: ActiveValue::Set(OffsetDateTime::now_utc()),
-            id: ActiveValue::Set(Uuid::new_v4()),
-            ..Default::default()
-        })
+    pub async fn create_user_session(
+        &self,
+        account: AccountId,
+    ) -> Result<user_session::Model, DbErr> {
+        UserSession::insert(
+            user_session::Model {
+                created: OffsetDateTime::now_utc(),
+                last_seen: OffsetDateTime::now_utc(),
+                id: Uuid::new_v4(),
+                account: account.0,
+            }
+            .into_active_model(),
+        )
         .exec_with_returning(&self.connection)
         .await
     }
@@ -88,14 +94,20 @@ impl Database {
     pub async fn get_user_session(
         &self,
         session: UserSessionId,
-    ) -> Result<Option<(user_session::Model, Option<account::Model>)>, DbErr> {
-        let mut sessions = UserSession::find_by_id(session.0)
+    ) -> Result<Option<(user_session::Model, account::Model)>, DbErr> {
+        let sessions = UserSession::find_by_id(session.0)
             .find_also_related(Account)
-            .all(&self.connection)
+            .one(&self.connection)
             .await?;
 
-        // There should only be one
-        Ok(sessions.pop())
+        Ok(sessions.map(|(session, account)| {
+            (
+                session,
+                // Based on the DB schema, this should uphold
+                // maybe there is a way to do this in sea-orm
+                account.expect("account should always exist on a user session"),
+            )
+        }))
     }
 
     #[tracing::instrument(skip(self))]
@@ -106,7 +118,7 @@ impl Database {
     ) -> Result<user_session::Model, DbErr> {
         UserSession::update(user_session::ActiveModel {
             id: ActiveValue::Unchanged(session.0),
-            account: ActiveValue::Set(Some(account.0)),
+            account: ActiveValue::Set(account.0),
             ..Default::default()
         })
         .exec(&self.connection)

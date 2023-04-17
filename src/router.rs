@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use axum::{http::header, response::Redirect, routing::get, Router};
+use axum::{extract::FromRef, http::header, response::Redirect, routing::get, Router};
 use color_eyre::eyre::Context;
 use tower_http::{
     cors::CorsLayer, request_id::MakeRequestUuid, services::ServeDir, timeout::TimeoutLayer,
@@ -25,6 +25,14 @@ pub async fn favicon() -> Redirect {
     Redirect::to("/static/branding/logo@192.png")
 }
 
+#[derive(FromRef, Clone)]
+// TODO: make cheaper to clone
+pub struct AppState {
+    pub database: Database,
+    pub spotify: SpotifyEnvironment,
+    pub github: GithubEnvironment,
+}
+
 pub async fn router(
     http: HttpEnvironment,
     spotify: SpotifyEnvironment,
@@ -34,14 +42,17 @@ pub async fn router(
         .await
         .wrap_err("failed to setup to database")?;
 
+    let state = AppState {
+        database,
+        spotify,
+        github,
+    };
+
     let app = Router::new()
         .route("/", get(pages::home))
         .route("/dashboard", get(pages::dashboard))
         .route("/login", get(pages::login))
-        .route(
-            "/login/spotify",
-            get(authentication::spotify::login).with_state((spotify, database.clone())),
-        )
+        .route("/login/spotify", get(authentication::spotify::login))
         .route("/login/github", get(authentication::login_github))
         // TODO: Image resizing/optimization
         .route("/favicon.ico", get(favicon))
@@ -60,11 +71,6 @@ pub async fn router(
                 // Give a unique identifier to every request
                 .set_x_request_id(MakeRequestUuid) // TODO: USE
                 .propagate_x_request_id()
-                // Create and track a user session
-                .layer(axum::middleware::from_fn_with_state(
-                    database,
-                    session::user_session,
-                ))
                 // Trace requests and responses
                 .layer(TraceLayer::new_for_http().make_span_with(SpanMaker)) // TODO: configure
                 // Send traces to sentry
@@ -99,7 +105,8 @@ pub async fn router(
                 ))
                 // Catch Panics in handlers
                 .layer(catch_panic_layer(error::internal_server_error_panic)),
-        );
+        )
+        .with_state(state);
 
     debug!(?http.bind, "started http server");
     axum::Server::bind(&http.bind)

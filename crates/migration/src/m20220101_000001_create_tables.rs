@@ -146,13 +146,13 @@ impl MigrationTrait for Migration {
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(UserSession::Account).uuid().null())
+                    .col(ColumnDef::new(UserSession::Account).uuid().not_null())
                     .foreign_key(
                         ForeignKey::create()
                             .to(Account::Table, Account::Id)
                             .from(UserSession::Table, UserSession::Account)
-                            .on_delete(ForeignKeyAction::SetNull)
-                            .on_update(ForeignKeyAction::SetNull),
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
                     )
                     .to_owned(),
             )

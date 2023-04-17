@@ -12,10 +12,9 @@ use time::OffsetDateTime;
 use tracing::{debug, trace};
 
 use crate::{
-    database::{AccountId, Database, SpotifyId, UserSessionId},
-    pages::EyreReport,
-    router::session::UserSession,
-    SpotifyEnvironment,
+    database::{AccountId, SpotifyId, UserSessionId},
+    pages::ErrorPage,
+    router::AppState,
 };
 
 #[derive(Debug, Deserialize)]
@@ -45,10 +44,11 @@ pub fn from_rspotify(token: rspotify::Token, user_id: SpotifyId) -> entity::spot
 }
 
 pub async fn login(
-    State((spotify, database)): State<(SpotifyEnvironment, Database)>,
-    session: UserSession,
+    State(AppState {
+        spotify, database, ..
+    }): State<AppState>,
     query: Option<Query<SpotifyAuthCodeResponse>>,
-) -> Result<Redirect, EyreReport> {
+) -> Result<Redirect, ErrorPage> {
     let auth = AuthCodeSpotify::new(
         spotify.credentials,
         rspotify::OAuth {

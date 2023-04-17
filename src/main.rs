@@ -5,7 +5,6 @@
 use std::{borrow::Cow, env, net::SocketAddr, path::PathBuf};
 
 use axum::http::{uri::Authority, Uri};
-use serde::Deserialize;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
 mod database;
@@ -60,7 +59,7 @@ impl SpotifyEnvironment {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GithubEnvironment {}
 
 fn main() -> Result<(), color_eyre::Report> {

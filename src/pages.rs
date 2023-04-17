@@ -13,7 +13,7 @@ mod login;
 
 pub use {
     dashboard::dashboard,
-    error::{not_found, panic_error, EyreReport},
+    error::{not_found, panic_error, ErrorPage},
     home::home,
     login::login,
 };

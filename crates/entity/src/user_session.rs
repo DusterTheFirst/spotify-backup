@@ -9,7 +9,7 @@ pub struct Model {
     pub id: Uuid,
     pub created: TimeDateTimeWithTimeZone,
     pub last_seen: TimeDateTimeWithTimeZone,
-    pub account: Option<Uuid>,
+    pub account: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -18,8 +18,8 @@ pub enum Relation {
         belongs_to = "super::account::Entity",
         from = "Column::Account",
         to = "super::account::Column::Id",
-        on_update = "SetNull",
-        on_delete = "SetNull"
+        on_update = "Cascade",
+        on_delete = "Cascade"
     )]
     Account,
 }
