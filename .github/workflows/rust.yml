@@ -17,7 +17,7 @@ jobs:
         with:
          components: clippy
 
-      - run: apt install lld -y
+      - run: sudo apt install lld -y
 
       - uses: actions/checkout@v2
 
