@@ -41,7 +41,7 @@ impl StaticServerInformation {
         (
             axum::response::AppendHeaders([
                 (
-                    header::SERVER,
+                    HeaderName::from_static("x-origin-server"),
                     HeaderValue::from_static(const_format::formatcp!(
                         "{}@{} (commit {})",
                         StaticServerInformation::SERVER.name,
