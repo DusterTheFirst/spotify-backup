@@ -17,6 +17,8 @@ jobs:
         with:
          components: clippy
 
+      - run: apt install lld -y
+
       - uses: actions/checkout@v2
 
       - run: cargo clippy --release --all-features

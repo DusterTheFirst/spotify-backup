@@ -2,6 +2,9 @@
 
 set -eu -o pipefail
 
+cargo clippy
+cargo fmt --fix
+
 # Check git status for untracked/modified files
 if [[ -n $(git status --porcelain=v1) ]]; then
     echo "git working tree is dirty, exiting.";
