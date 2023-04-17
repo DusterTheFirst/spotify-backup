@@ -4,19 +4,22 @@ use axum::{
 };
 use dioxus::prelude::*;
 
+use crate::router::middleware::server_information::SERVER_INFO;
+
 mod dashboard;
 mod error;
+mod home;
 mod login;
 
 pub use {
     dashboard::dashboard,
     error::{not_found, panic_error, EyreReport},
+    home::home,
     login::login,
 };
 
 pub struct Page<'e> {
     pub title: LazyNodes<'e, 'e>,
-    pub head: Option<LazyNodes<'e, 'e>>,
     pub content: LazyNodes<'e, 'e>,
 }
 
@@ -45,21 +48,35 @@ impl<'e> Page<'e> {
                     r#type: "image/png",
                     sizes: "192x192"
                 }
+                link { rel: "stylesheet", href: "/static/styles.css" }
 
-                link { rel: "manifest", href: "/static/manifest.json"}
+                link { rel: "manifest", href: "/static/manifest.json" }
+
+                // FIXME: keep?
+                if cfg!(debug_assertions) {
+                    rsx! {
+                        script { src: "https://livejs.com/live.js#css,js" }
+                    }
+                }
 
                 title { self.title, " - Spotify Backup" }
-
-                self.head
             }
             body {
                 self.content
+                footer {
+                    SERVER_INFO.name
+                    " version "
+                    SERVER_INFO.version
+                    " commit "
+                    a { href: SERVER_INFO.source,
+                        target: "_blank",
+                        SERVER_INFO.commit
+                    }
+                    " environment "
+                    SERVER_INFO.environment
+                }
             }
         }
-
-        // <!DOCTYPE html>
-        // <html lang="en">
-        // </html>
     }
 }
 

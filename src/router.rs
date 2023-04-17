@@ -35,7 +35,8 @@ pub async fn router(
         .wrap_err("failed to setup to database")?;
 
     let app = Router::new()
-        .route("/", get(pages::dashboard))
+        .route("/", get(pages::home))
+        .route("/dashboard", get(pages::dashboard))
         .route("/login", get(pages::login))
         .route(
             "/login/spotify",

@@ -21,8 +21,10 @@ pub struct StaticServerInformation {
     pub environment: &'static str,
 }
 
+pub const SERVER_INFO: StaticServerInformation = self::StaticServerInformation::INFO;
+
 impl StaticServerInformation {
-    const SERVER: Self = StaticServerInformation {
+    const INFO: Self = StaticServerInformation {
         name: env!("CARGO_PKG_NAME"),
         version: env!("CARGO_PKG_VERSION"),
         commit: git_version!(),
@@ -44,18 +46,18 @@ impl StaticServerInformation {
                     HeaderName::from_static("x-origin-server"),
                     HeaderValue::from_static(const_format::formatcp!(
                         "{}@{} (commit {})",
-                        StaticServerInformation::SERVER.name,
-                        StaticServerInformation::SERVER.version,
-                        StaticServerInformation::SERVER.commit
+                        StaticServerInformation::INFO.name,
+                        StaticServerInformation::INFO.version,
+                        StaticServerInformation::INFO.commit
                     )),
                 ),
                 (
                     HeaderName::from_static("x-server-source"),
-                    HeaderValue::from_static(StaticServerInformation::SERVER.source),
+                    HeaderValue::from_static(StaticServerInformation::INFO.source),
                 ),
                 (
                     HeaderName::from_static("x-server-environment"),
-                    HeaderValue::from_static(StaticServerInformation::SERVER.environment),
+                    HeaderValue::from_static(StaticServerInformation::INFO.environment),
                 ),
             ]),
             next.run(req).await,

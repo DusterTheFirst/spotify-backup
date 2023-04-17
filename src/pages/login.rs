@@ -5,7 +5,6 @@ use super::Page;
 pub async fn login() -> Page<'static> {
     Page {
         title: rsx! { "Login" },
-        head: None,
         content: rsx! {
             h1 { "welcome" }
 

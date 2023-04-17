@@ -1,0 +1,36 @@
+:root {
+    color-scheme: dark light;
+}
+
+body {
+    margin: 0em;
+
+    min-height: 100vh;
+
+    display: flex;
+    flex-direction: column;
+}
+
+pre {
+    text-align: left;
+    overflow: scroll;
+
+    white-space: pre-wrap;
+}
+
+footer {
+    margin-top: auto;
+
+    border-top: solid black 1px;
+
+    padding: 1em 1em;
+}
+
+.error_message {
+    margin-top: auto;
+    text-align: center;
+
+    font-size: 2em;
+    font-weight: bold;
+    text-align: center;
+}

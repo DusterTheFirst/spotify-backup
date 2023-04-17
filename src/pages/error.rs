@@ -118,12 +118,10 @@ fn error<'a>(status: StatusCode, body: LazyNodes<'a, 'a>) -> (StatusCode, Page<'
         status,
         Page {
             title: rsx! { "{status_code} ({status_reason})" },
-            head: Some(rsx! {
-                style { include_str!("error.css") }
-            }),
             content: rsx! {
                 header {
-                    h1 { "{status_code} | {status_reason}" }
+                    class: "error_message",
+                    "{status_code} | {status_reason}"
                 }
                 main {
                     body
