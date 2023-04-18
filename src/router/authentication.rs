@@ -1,7 +1,7 @@
 use axum::{
     async_trait,
     extract::{FromRef, FromRequestParts},
-    http::request,
+    http::{request, StatusCode},
     response::Redirect,
     RequestPartsExt,
 };
@@ -14,8 +14,12 @@ use super::session::{UserSessionId, UserSessionIdRejection};
 
 pub mod spotify;
 
-pub async fn login_github() -> Redirect {
-    Redirect::to("/")
+#[axum::debug_handler]
+pub async fn login_github() -> (StatusCode, &'static str) {
+    (
+        StatusCode::NOT_IMPLEMENTED,
+        StatusCode::NOT_IMPLEMENTED.canonical_reason().expect(""),
+    )
 }
 
 #[derive(Debug)]
