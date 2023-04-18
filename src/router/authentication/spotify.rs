@@ -2,6 +2,7 @@ use axum::{
     extract::{Query, State},
     response::Redirect,
 };
+use axum_extra::either::Either;
 use color_eyre::eyre::{eyre, Context};
 use rspotify::{
     prelude::{Id, OAuthClient},
@@ -12,9 +13,8 @@ use time::OffsetDateTime;
 use tracing::{debug, trace};
 
 use crate::{
-    database::{AccountId, SpotifyId, UserSessionId},
     pages::ErrorPage,
-    router::AppState,
+    router::{session::UserSessionId, AppState},
 };
 
 #[derive(Debug, Deserialize)]
@@ -24,7 +24,10 @@ pub enum SpotifyAuthCodeResponse {
     Failure { error: String, state: String },
 }
 
-pub fn from_rspotify(token: rspotify::Token, user_id: SpotifyId) -> entity::spotify_auth::Model {
+pub fn from_rspotify(
+    token: rspotify::Token,
+    user_id: rspotify::model::UserId,
+) -> entity::spotify_auth::Model {
     entity::spotify_auth::Model {
         access_token: token.access_token,
         expires_at: time::OffsetDateTime::from_unix_timestamp(
@@ -38,7 +41,7 @@ pub fn from_rspotify(token: rspotify::Token, user_id: SpotifyId) -> entity::spot
             .refresh_token
             .expect("rspotify token should contain refresh token"),
         scopes: token.scopes.into_iter().collect(),
-        user_id: user_id.into_raw(),
+        user_id: user_id.id().to_string(),
         created: OffsetDateTime::now_utc(),
     }
 }
@@ -47,8 +50,9 @@ pub async fn login(
     State(AppState {
         spotify, database, ..
     }): State<AppState>,
+    user_session: Option<UserSessionId>,
     query: Option<Query<SpotifyAuthCodeResponse>>,
-) -> Result<Redirect, ErrorPage> {
+) -> Result<Either<(UserSessionId, Redirect), Redirect>, ErrorPage> {
     let auth = AuthCodeSpotify::new(
         spotify.credentials,
         rspotify::OAuth {
@@ -83,62 +87,25 @@ pub async fn login(
                     .await
                     .expect("spotify client token mutex should not be poisoned");
 
-                let spotify_id = SpotifyId::from_raw(user.id.id().to_string());
-
-                let token = from_rspotify(
-                    token.clone().expect("spotify client token should exist"),
-                    spotify_id.clone(),
-                );
-
-                dbg!(&token);
-
-                let created = database
-                    .update_user_authentication(spotify_id, token)
-                    .await
-                    .wrap_err("failed to update into database")?;
-
-                dbg!(&created);
-
-                let spotify_id = SpotifyId::from_raw(created.user_id);
-
-                let account = database
-                    .get_or_create_account_by_spotify(spotify_id)
-                    .await
-                    .wrap_err("failed to get spotify account")?;
-
-                dbg!(&account);
-
-                database
-                    .login_user_session(
-                        UserSessionId::from_raw(session.session.id),
-                        AccountId::from_raw(account.id),
+                let new_session = database
+                    .login_user_by_spotify(
+                        user_session,
+                        from_rspotify(
+                            token.clone().expect("spotify client token should exist"),
+                            user.id.clone(),
+                        ),
                     )
                     .await
-                    .wrap_err("failed to login user session")?;
+                    .wrap_err("failed to login to spotify account")?;
 
-                return Ok(Redirect::to("/"));
+                return Ok(Either::E1((new_session, Redirect::to("/"))));
             }
         }
     }
 
-    // TODO: sessions, merge logged-in path with logging in path
-    // let authentication: Option<SpotifyToken> = database
-    //     .get_user_authentication("dusterthefirst")
-    //     .await
-    //     .wrap_err("failed to select into database")
-    //     .map_err(|error| pages::dyn_error(error.as_ref(), &request_metadata))?;
-
-    // if let Some(authentication) = authentication {
-    //     // TODO: verify the credentials
-    //     info!("user attempted to re-login with existing credentials");
-
-    //     return Ok(Redirect::to("/already/logged/in"));
-    // }
-
-    // TODO: distinguish return users?
     let auth_url = auth
         .get_authorize_url(true)
         .expect("authorization url should be valid");
 
-    Ok(Redirect::to(&auth_url))
+    Ok(Either::E2(Redirect::to(&auth_url)))
 }

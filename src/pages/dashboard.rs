@@ -1,14 +1,14 @@
 use dioxus::prelude::*;
 
-use crate::{pages::Page, router::authentication::Account};
+use crate::{pages::Page, router::authentication::User};
 
-pub async fn dashboard(auth: Account) -> Page<'static> {
+pub async fn dashboard(auth: User) -> Page<'static> {
     Page {
         title: rsx! { "Dashboard" },
         content: rsx! {
-            code { "hello, i guess" }
+            h1 { "hello, i guess" }
             pre {
-                "{auth:?}"
+                "{auth:#?}"
             }
         },
     }

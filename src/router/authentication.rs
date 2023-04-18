@@ -5,15 +5,12 @@ use axum::{
     response::Redirect,
     RequestPartsExt,
 };
-use axum_extra::{either::Either, extract::CookieJar};
-use color_eyre::eyre::Context;
+use axum_extra::either::Either;
+use color_eyre::{eyre::Context, Report};
 
-use crate::{
-    database::{Database, UserSessionId},
-    pages::ErrorPage,
-};
+use crate::{database::Database, pages::ErrorPage};
 
-use super::AppState;
+use super::session::{UserSessionId, UserSessionIdRejection};
 
 pub mod spotify;
 
@@ -22,15 +19,13 @@ pub async fn login_github() -> Redirect {
 }
 
 #[derive(Debug)]
-pub struct Account {
+pub struct User {
+    pub session: entity::user_session::Model,
     pub account: entity::account::Model,
 }
 
-// FIXME: session pruning
-const SESSION_COOKIE: &str = "spotify-backup-session";
-
 #[async_trait]
-impl<S> FromRequestParts<S> for Account
+impl<S> FromRequestParts<S> for User
 where
     Database: FromRef<S>,
     S: Sync,
@@ -41,28 +36,27 @@ where
         parts: &mut request::Parts,
         state: &S,
     ) -> Result<Self, Self::Rejection> {
-        let cookies = parts
-            .extract::<CookieJar>()
-            .await
-            .expect("cookie jar should never fail");
-
         let database = Database::from_ref(state);
 
-        if let Some(session_uuid) = cookies
-            .get(SESSION_COOKIE)
-            .and_then(|session| session.value().parse().ok())
-        {
-            if let Some((session, account)) = database
-                .get_user_session(UserSessionId::from_raw(session_uuid))
-                .await
-                .wrap_err("failed to get user session")
-                .map_err(|error| Either::E2(error.into()))?
-            {
-                return Ok(Account { account });
-            } else {
-                tracing::trace!(%session_uuid, "user had bad session uuid")
+        match parts.extract::<UserSessionId>().await {
+            Ok(user_session) => {
+                if let Some((session, account)) = database
+                    .get_user_session(user_session)
+                    .await
+                    .wrap_err("failed to get user session")
+                    .map_err(|error| Either::E2(error.into()))?
+                {
+                    return Ok(User { session, account });
+                }
             }
-        }
+            Err(UserSessionIdRejection::BadSessionCookie(error)) => {
+                // TODO: probably should be 400 not 500
+                return Err(Either::E2(ErrorPage::from(
+                    Report::new(error).wrap_err("unable to extract user session id"),
+                )));
+            }
+            Err(UserSessionIdRejection::NoSessionCookie) => {}
+        };
 
         Err(Either::E1(Redirect::to("/login")))
     }

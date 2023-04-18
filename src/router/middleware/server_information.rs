@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    http::{header, HeaderName, HeaderValue, Request},
+    http::{HeaderName, HeaderValue, Request},
     middleware::Next,
     response::IntoResponse,
 };

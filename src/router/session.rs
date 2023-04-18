@@ -1,37 +1,94 @@
-use std::convert::Infallible;
+use std::{convert::Infallible, str::FromStr};
 
-use axum::{async_trait, extract::FromRequestParts};
+use axum::{
+    async_trait,
+    extract::FromRequestParts,
+    http::StatusCode,
+    response::{IntoResponse, IntoResponseParts},
+    RequestPartsExt,
+};
 use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
-use color_eyre::eyre::Context;
+use sea_orm::prelude::Uuid;
 use tracing::debug;
-
-use crate::database::{AccountId, Database, UserSessionId};
 
 const SESSION_COOKIE: &str = "spotify-backup-session";
 
-pub async fn create_user_session(
-    cookies: CookieJar,
-    database: Database,
-    account: entity::account::Model,
-) -> Result<(CookieJar, UserSession), color_eyre::eyre::Report> {
-    let session = database
-        .create_user_session(AccountId::from_raw(account.id))
-        .await
-        .wrap_err("failed to create user session")?;
+#[derive(Debug)]
+pub struct UserSessionId(Uuid);
 
-    let session_id = session.id;
-    debug!(?session_id, "new user, created session");
+impl UserSessionId {
+    pub fn from_user_session(session: entity::user_session::Model) -> Self {
+        Self(session.id)
+    }
 
-    let new_cookie = cookies.add(
-        Cookie::build(SESSION_COOKIE, session.id.to_string())
-            .path("/")
-            .same_site(SameSite::Lax)
-            .secure(true)
-            .http_only(true)
-            .finish(),
-    );
+    pub fn as_uuid(&self) -> Uuid {
+        self.0
+    }
+}
 
-    Ok((new_cookie, UserSession { session, account }))
+#[derive(Debug)]
+pub enum UserSessionIdRejection {
+    NoSessionCookie,
+    BadSessionCookie(<Uuid as FromStr>::Err),
+}
+
+impl IntoResponse for UserSessionIdRejection {
+    fn into_response(self) -> axum::response::Response {
+        match self {
+            UserSessionIdRejection::NoSessionCookie => StatusCode::UNAUTHORIZED.into_response(),
+            UserSessionIdRejection::BadSessionCookie(error) => {
+                debug!(?error, "user has bad session cookie");
+
+                StatusCode::BAD_REQUEST.into_response()
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl<S> FromRequestParts<S> for UserSessionId {
+    type Rejection = UserSessionIdRejection;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        let cookies = parts
+            .extract::<CookieJar>()
+            .await
+            .expect("cookie jar should never fail");
+
+        if let Some(cookie) = cookies.get(SESSION_COOKIE) {
+            let uuid = cookie
+                .value()
+                .parse()
+                .map_err(UserSessionIdRejection::BadSessionCookie)?;
+
+            Ok(UserSessionId(uuid))
+        } else {
+            Err(UserSessionIdRejection::NoSessionCookie)
+        }
+    }
+}
+
+impl IntoResponseParts for UserSessionId {
+    type Error = Infallible;
+
+    fn into_response_parts(
+        self,
+        res: axum::response::ResponseParts,
+    ) -> Result<axum::response::ResponseParts, Self::Error> {
+        CookieJar::new()
+            .add(
+                Cookie::build(SESSION_COOKIE, self.0.to_string())
+                    .path("/")
+                    .same_site(SameSite::Lax)
+                    .secure(true)
+                    .http_only(true)
+                    .finish(),
+            )
+            .into_response_parts(res)
+    }
 }
 
 #[derive(Debug, Clone)]
