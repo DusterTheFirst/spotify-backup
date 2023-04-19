@@ -7,8 +7,13 @@ use axum::{
 };
 use axum_extra::either::Either;
 use color_eyre::{eyre::Context, Report};
+use sea_orm::prelude::Uuid;
+use time::OffsetDateTime;
 
-use crate::{database::Database, pages::ErrorPage};
+use crate::{
+    database::{id::SpotifyUserId, Database},
+    pages::ErrorPage,
+};
 
 use super::session::{UserSessionId, UserSessionIdRejection};
 
@@ -23,13 +28,48 @@ pub async fn login_github() -> (StatusCode, &'static str) {
 }
 
 #[derive(Debug)]
-pub struct User {
+pub struct IncompleteUser {
     pub session: entity::user_session::Model,
     pub account: entity::account::Model,
 }
 
+impl IncompleteUser {
+    pub fn is_complete(&self) -> bool {
+        self.account.github.is_some() && self.account.spotify.is_some()
+    }
+
+    pub fn into_complete(self) -> Option<CompleteUser> {
+        self.account
+            .github
+            .zip(self.account.spotify)
+            .map(|(github, spotify)| CompleteUser {
+                session: self.session,
+                account: CompleteAccount {
+                    id: self.account.id,
+                    spotify: SpotifyUserId::from_raw(self.account.spotify),
+                    github: (), // FIXME: TODO:
+                    created: self.account.created,
+                },
+            })
+    }
+}
+
+#[derive(Debug)]
+pub struct CompleteUser {
+    pub session: entity::user_session::Model,
+    pub account: CompleteAccount,
+}
+
+#[derive(Debug)]
+pub struct CompleteAccount {
+    pub id: Uuid,
+    pub spotify: SpotifyUserId,
+    pub github: (), // GithubUserId
+    pub created: OffsetDateTime,
+}
+
 #[async_trait]
-impl<S> FromRequestParts<S> for User
+impl<S> FromRequestParts<S> for IncompleteUser
 where
     Database: FromRef<S>,
     S: Sync,
@@ -50,7 +90,7 @@ where
                     .wrap_err("failed to get user session")
                     .map_err(|error| Either::E2(error.into()))?
                 {
-                    return Ok(User { session, account });
+                    return Ok(IncompleteUser { session, account });
                 }
             }
             Err(UserSessionIdRejection::BadSessionCookie(error)) => {
@@ -62,6 +102,6 @@ where
             Err(UserSessionIdRejection::NoSessionCookie) => {}
         };
 
-        Err(Either::E1(Redirect::to("/login")))
+        Err(Either::E1(Redirect::to("/")))
     }
 }

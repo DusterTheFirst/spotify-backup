@@ -1,23 +1,29 @@
 use dioxus::prelude::*;
 
-use crate::router::authentication::User;
+use crate::router::authentication::IncompleteUser;
 
 use super::Page;
 
-pub async fn home(account: Option<User>) -> Page<'static> {
+pub async fn home(account: Option<IncompleteUser>) -> Page<'static> {
     let navigation = match account {
         Some(user) => rsx! {
+            // TODO: if incomplete, tell them to finish setting up account
             section {
                 h2 { "Welcome back" }
-                a { href: "/logout", "log out" }
-                a { href: "/dashboard", "go to dashboard" }
+                ul {
+                    li { a { href: "/logout", "log out" } }
+                    li { a { href: "/dashboard", "go to dashboard" } }
+                }
                 pre { "{user.account:#?}" }
             }
         },
         None => rsx! {
             section {
                 h2 { "Welcome" }
-                a { href: "/login", "Login" }
+                ul {
+                    li { a { href: "/login/github", "Login With Github" } }
+                    li { a { href: "/login/github", "Login With Spotify" } }
+                }
             }
         },
     };

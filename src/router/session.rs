@@ -11,20 +11,9 @@ use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
 use sea_orm::prelude::Uuid;
 use tracing::debug;
 
+use crate::database::id::UserSessionId;
+
 const SESSION_COOKIE: &str = "spotify-backup-session";
-
-#[derive(Debug)]
-pub struct UserSessionId(Uuid);
-
-impl UserSessionId {
-    pub fn from_user_session(session: entity::user_session::Model) -> Self {
-        Self(session.id)
-    }
-
-    pub fn as_uuid(&self) -> Uuid {
-        self.0
-    }
-}
 
 #[derive(Debug)]
 pub enum UserSessionIdRejection {
@@ -64,7 +53,7 @@ impl<S> FromRequestParts<S> for UserSessionId {
                 .parse()
                 .map_err(UserSessionIdRejection::BadSessionCookie)?;
 
-            Ok(UserSessionId(uuid))
+            Ok(UserSessionId::from_raw(uuid))
         } else {
             Err(UserSessionIdRejection::NoSessionCookie)
         }
@@ -80,7 +69,7 @@ impl IntoResponseParts for UserSessionId {
     ) -> Result<axum::response::ResponseParts, Self::Error> {
         CookieJar::new()
             .add(
-                Cookie::build(SESSION_COOKIE, self.0.to_string())
+                Cookie::build(SESSION_COOKIE, self.into_uuid().to_string())
                     .path("/")
                     .same_site(SameSite::Lax)
                     .secure(true)

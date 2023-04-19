@@ -51,7 +51,7 @@ pub async fn router(
     let app = Router::new()
         .route("/", get(pages::home))
         .route("/dashboard", get(pages::dashboard))
-        .route("/login", get(pages::login))
+        .route("/account", get(pages::account))
         .route("/login/spotify", get(authentication::spotify::login))
         .route("/login/github", get(authentication::login_github))
         // TODO: Image resizing/optimization

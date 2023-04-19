@@ -9,13 +9,13 @@ use crate::router::middleware::server_information::SERVER_INFO;
 mod dashboard;
 mod error;
 mod home;
-mod login;
+mod account;
 
 pub use {
     dashboard::dashboard,
     error::{not_found, panic_error, ErrorPage},
     home::home,
-    login::login,
+    account::account,
 };
 
 pub struct Page<'e> {

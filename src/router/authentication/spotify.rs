@@ -12,10 +12,7 @@ use serde::Deserialize;
 use time::OffsetDateTime;
 use tracing::{debug, trace};
 
-use crate::{
-    pages::ErrorPage,
-    router::{session::UserSessionId, AppState},
-};
+use crate::{database::id::UserSessionId, pages::ErrorPage, router::AppState};
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -77,6 +74,7 @@ pub async fn login(
                     .wrap_err("failed to request access token")?;
 
                 // FIXME: 403 when user is outside of allowlist
+                // https://developer.spotify.com/documentation/web-api/concepts/quota-modes
                 let user = auth
                     .current_user()
                     .await
@@ -88,6 +86,7 @@ pub async fn login(
                     .await
                     .expect("spotify client token mutex should not be poisoned");
 
+                // TODO: delete accounts that are not finished when switched off of them
                 let new_session = database
                     .login_user_by_spotify(
                         user_session,
