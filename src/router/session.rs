@@ -96,7 +96,7 @@ impl IntoResponseParts for UserSession {
                 if uuid.is_nil() {
                     Expiration::DateTime(OffsetDateTime::UNIX_EPOCH)
                 } else {
-                    Expiration::DateTime(OffsetDateTime::now_utc() + Duration::days(365))
+                    Expiration::Session
                     // FIXME: not so long?
                 },
             )
