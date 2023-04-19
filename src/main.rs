@@ -72,12 +72,12 @@ fn main() -> Result<(), color_eyre::Report> {
         .with(sentry::integrations::tracing::layer())
         .init();
 
+    // FIXME: the errors have almost no good context, find way to report color_eyre reports
     let _guard = sentry::init(sentry::ClientOptions {
         dsn: env::var("SENTRY_DSN")
             .ok()
             .map(|dsn| dsn.parse().expect("SENTRY_DSN should be a valid DSN")),
-        // TODO: setup release tracking
-        release: Some(git_version::git_version!(args = ["--always", "--abbrev=40"]).into()), // sentry::release_name!(), // TODO: use git hash?
+        release: Some(git_version::git_version!(args = ["--always", "--abbrev=40"]).into()),
         sample_rate: 1.0,
         traces_sample_rate: 0.0, // TODO: make not 0, but also not spam
         enable_profiling: true,

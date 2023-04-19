@@ -76,6 +76,7 @@ pub async fn login(
                     .await
                     .wrap_err("failed to request access token")?;
 
+                // FIXME: 403 when user is outside of allowlist
                 let user = auth
                     .current_user()
                     .await
