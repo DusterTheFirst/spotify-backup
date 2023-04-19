@@ -15,17 +15,22 @@ use crate::database::id::UserSessionId;
 
 const SESSION_COOKIE: &str = "spotify-backup-session";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UserSession {
+    pub id: UserSessionId,
+}
+
 #[derive(Debug)]
-pub enum UserSessionIdRejection {
+pub enum UserSessionRejection {
     NoSessionCookie,
     BadSessionCookie(<Uuid as FromStr>::Err),
 }
 
-impl IntoResponse for UserSessionIdRejection {
+impl IntoResponse for UserSessionRejection {
     fn into_response(self) -> axum::response::Response {
         match self {
-            UserSessionIdRejection::NoSessionCookie => StatusCode::UNAUTHORIZED.into_response(),
-            UserSessionIdRejection::BadSessionCookie(error) => {
+            UserSessionRejection::NoSessionCookie => StatusCode::UNAUTHORIZED.into_response(),
+            UserSessionRejection::BadSessionCookie(error) => {
                 debug!(?error, "user has bad session cookie");
 
                 StatusCode::BAD_REQUEST.into_response()
@@ -35,8 +40,8 @@ impl IntoResponse for UserSessionIdRejection {
 }
 
 #[async_trait]
-impl<S> FromRequestParts<S> for UserSessionId {
-    type Rejection = UserSessionIdRejection;
+impl<S> FromRequestParts<S> for UserSession {
+    type Rejection = UserSessionRejection;
 
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
@@ -51,16 +56,18 @@ impl<S> FromRequestParts<S> for UserSessionId {
             let uuid = cookie
                 .value()
                 .parse()
-                .map_err(UserSessionIdRejection::BadSessionCookie)?;
+                .map_err(UserSessionRejection::BadSessionCookie)?;
 
-            Ok(UserSessionId::from_raw(uuid))
+            Ok(UserSession {
+                id: UserSessionId::from_raw(uuid),
+            })
         } else {
-            Err(UserSessionIdRejection::NoSessionCookie)
+            Err(UserSessionRejection::NoSessionCookie)
         }
     }
 }
 
-impl IntoResponseParts for UserSessionId {
+impl IntoResponseParts for UserSession {
     type Error = Infallible;
 
     fn into_response_parts(
@@ -69,7 +76,7 @@ impl IntoResponseParts for UserSessionId {
     ) -> Result<axum::response::ResponseParts, Self::Error> {
         CookieJar::new()
             .add(
-                Cookie::build(SESSION_COOKIE, self.into_uuid().to_string())
+                Cookie::build(SESSION_COOKIE, self.id.into_uuid().to_string())
                     .path("/")
                     .same_site(SameSite::Lax)
                     .secure(true)
@@ -78,10 +85,4 @@ impl IntoResponseParts for UserSessionId {
             )
             .into_response_parts(res)
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct UserSession {
-    pub session: entity::user_session::Model,
-    pub account: entity::account::Model,
 }

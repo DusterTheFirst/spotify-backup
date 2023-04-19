@@ -12,7 +12,10 @@ use serde::Deserialize;
 use time::OffsetDateTime;
 use tracing::{debug, trace};
 
-use crate::{database::id::UserSessionId, pages::ErrorPage, router::AppState};
+use crate::{
+    pages::ErrorPage,
+    router::{session::UserSession, AppState},
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
@@ -47,9 +50,9 @@ pub async fn login(
     State(AppState {
         spotify, database, ..
     }): State<AppState>,
-    user_session: Option<UserSessionId>,
+    user_session: Option<UserSession>,
     query: Option<Query<SpotifyAuthCodeResponse>>,
-) -> Result<Either<(UserSessionId, Redirect), Redirect>, ErrorPage> {
+) -> Result<Either<(UserSession, Redirect), Redirect>, ErrorPage> {
     let auth = AuthCodeSpotify::new(
         spotify.credentials,
         rspotify::OAuth {
@@ -86,10 +89,10 @@ pub async fn login(
                     .await
                     .expect("spotify client token mutex should not be poisoned");
 
-                // TODO: delete accounts that are not finished when switched off of them
+                // TODO: delete accounts that are not finished when logged off of them
                 let new_session = database
                     .login_user_by_spotify(
-                        user_session,
+                        user_session.map(|s| s.id),
                         from_rspotify(
                             token.clone().expect("spotify client token should exist"),
                             user.id.clone(),
@@ -98,7 +101,10 @@ pub async fn login(
                     .await
                     .wrap_err("failed to login to spotify account")?;
 
-                return Ok(Either::E1((new_session, Redirect::to("/"))));
+                return Ok(Either::E1((
+                    UserSession { id: new_session },
+                    Redirect::to("/account"),
+                )));
             }
         }
     }

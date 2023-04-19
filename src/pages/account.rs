@@ -10,18 +10,17 @@ pub async fn account(current_user: IncompleteUser) -> Response {
     let github_login = current_user.account.github.as_ref();
     let user_complete = current_user.is_complete();
 
-    // TODO: make this a general account management page
     Page {
         title: rsx! { "Account" },
         content: rsx! {
-            h1 { "Welcome" }
+            h1 { "Account" }
             if user_complete {
                 rsx! {
-                    "manage your account"
+                    p { "manage your account" }
                 }
             } else {
                 rsx! {
-                    "finish setting up your account"
+                    p { "you must finish setting up your account, before you can use the service" }
                 }
             }
 
@@ -55,6 +54,12 @@ pub async fn account(current_user: IncompleteUser) -> Response {
                                 "log in with github"
                             }
                         }
+                    }
+                }
+                hr {}
+                li {
+                    a { href: "/logout",
+                        "log out"
                     }
                 }
             }

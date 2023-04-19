@@ -9,6 +9,11 @@ impl SpotifyUserId {
         Self(auth.user_id)
     }
 
+    // TODO: do away with
+    pub fn from_raw(id: String) -> Self {
+        SpotifyUserId(id)
+    }
+
     pub fn from_rspotify_user_id(id: rspotify::model::UserId) -> Self {
         Self(id.id().to_string())
     }
@@ -39,7 +44,7 @@ impl AccountId {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UserSessionId(Uuid);
 
 impl UserSessionId {
@@ -47,7 +52,7 @@ impl UserSessionId {
         Self(session.id)
     }
 
-    pub fn into_uuid(&self) -> Uuid {
+    pub fn into_uuid(self) -> Uuid {
         self.0
     }
 
