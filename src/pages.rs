@@ -6,16 +6,16 @@ use dioxus::prelude::*;
 
 use crate::router::middleware::server_information::SERVER_INFO;
 
+mod account;
 mod dashboard;
 mod error;
 mod home;
-mod account;
 
 pub use {
+    account::account,
     dashboard::dashboard,
     error::{not_found, panic_error, ErrorPage},
     home::home,
-    account::account,
 };
 
 pub struct Page<'e> {
