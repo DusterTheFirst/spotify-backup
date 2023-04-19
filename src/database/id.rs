@@ -56,7 +56,7 @@ impl UserSessionId {
         self.0
     }
 
-    pub fn from_raw(uuid: Uuid) -> Self {
+    pub const fn from_raw(uuid: Uuid) -> Self {
         Self(uuid)
     }
 }

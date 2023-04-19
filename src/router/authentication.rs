@@ -1,8 +1,8 @@
 use axum::{
     async_trait,
-    extract::{FromRef, FromRequestParts},
+    extract::{FromRef, FromRequestParts, State},
     http::{request, StatusCode},
-    response::Redirect,
+    response::{IntoResponse, Redirect, Response},
     RequestPartsExt,
 };
 use axum_extra::either::Either;
@@ -17,14 +17,20 @@ use crate::{
 
 use super::session::{UserSession, UserSessionRejection};
 
+pub mod github;
 pub mod spotify;
 
-#[axum::debug_handler]
-pub async fn login_github() -> (StatusCode, &'static str) {
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        StatusCode::NOT_IMPLEMENTED.canonical_reason().expect(""),
-    )
+pub async fn logout(
+    State(database): State<Database>,
+    session: Option<UserSession>,
+) -> Result<Response, ErrorPage> {
+    if let Some(session) = session {
+        let session = database.delete_user_session(session).await?;
+
+        Ok((session, Redirect::to("/")).into_response())
+    } else {
+        Ok(Redirect::to("/").into_response())
+    }
 }
 
 #[derive(Debug)]

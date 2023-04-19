@@ -47,6 +47,45 @@ impl Database {
     ) -> Result<Option<(user_session::Model, account::Model)>, DbErr> {
         get_user_session(&self.connection, session).await
     }
+
+    pub async fn delete_user_session(
+        &self,
+        session: crate::router::session::UserSession,
+    ) -> Result<crate::router::session::UserSession, Report> {
+        let transaction = self
+            .connection
+            .transaction::<_, _, DbErrReport>(|transaction| {
+                Box::pin(async move {
+                    let user_session = get_user_session(transaction, session.id)
+                        .await
+                        .wrap_err("getting current session")?;
+
+                    if let Some((session, account)) = user_session {
+                        session
+                            .delete(transaction)
+                            .await
+                            .wrap_err("deleting current session")?;
+
+                        // TODO: consolidate this with IncompleteUser???
+                        if account.github.is_none() || account.spotify.is_none() {
+                            account
+                                .delete(transaction)
+                                .await
+                                .wrap_err("deleting current, incomplete account")?;
+                        }
+                    }
+
+                    Ok(())
+                })
+            })
+            .await;
+
+        match transaction {
+            Err(TransactionError::Connection(error)) => Err(Report::new(error)),
+            Err(TransactionError::Transaction(error)) => Err(error.0),
+            Ok(()) => Ok(crate::router::session::UserSession::remove()),
+        }
+    }
 }
 
 async fn get_user_session(
@@ -124,6 +163,8 @@ impl Database {
                                 .wrap_err("getting current session")?
                             {
                                 Some((session, account)) => {
+                                    // FIXME: !!! use [`Database::delete_user_session`]
+
                                     // Delete the current session
                                     session
                                         .delete(transaction)

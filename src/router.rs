@@ -53,7 +53,8 @@ pub async fn router(
         .route("/dashboard", get(pages::dashboard))
         .route("/account", get(pages::account))
         .route("/login/spotify", get(authentication::spotify::login))
-        .route("/login/github", get(authentication::login_github))
+        .route("/login/github", get(authentication::github::login))
+        .route("/logout", get(authentication::logout))
         // TODO: Image resizing/optimization
         .route("/favicon.ico", get(favicon))
         .route("/health", get(|| async { "OK" }))

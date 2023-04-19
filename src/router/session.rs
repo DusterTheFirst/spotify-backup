@@ -7,8 +7,9 @@ use axum::{
     response::{IntoResponse, IntoResponseParts},
     RequestPartsExt,
 };
-use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use axum_extra::extract::cookie::{Cookie, CookieJar, Expiration, SameSite};
 use sea_orm::prelude::Uuid;
+use time::{Duration, OffsetDateTime};
 use tracing::debug;
 
 use crate::database::id::UserSessionId;
@@ -18,6 +19,14 @@ const SESSION_COOKIE: &str = "spotify-backup-session";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UserSession {
     pub id: UserSessionId,
+}
+
+impl UserSession {
+    pub const fn remove() -> UserSession {
+        UserSession {
+            id: UserSessionId::from_raw(Uuid::nil()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -53,6 +62,7 @@ impl<S> FromRequestParts<S> for UserSession {
             .expect("cookie jar should never fail");
 
         if let Some(cookie) = cookies.get(SESSION_COOKIE) {
+            // FIXME: delete bad session cookes from user agent?
             let uuid = cookie
                 .value()
                 .parse()
@@ -74,15 +84,24 @@ impl IntoResponseParts for UserSession {
         self,
         res: axum::response::ResponseParts,
     ) -> Result<axum::response::ResponseParts, Self::Error> {
-        CookieJar::new()
-            .add(
-                Cookie::build(SESSION_COOKIE, self.id.into_uuid().to_string())
-                    .path("/")
-                    .same_site(SameSite::Lax)
-                    .secure(true)
-                    .http_only(true)
-                    .finish(),
+        let uuid = self.id.into_uuid();
+
+        let cookie: Cookie = Cookie::build(SESSION_COOKIE, uuid.to_string())
+            .path("/")
+            .same_site(SameSite::Lax)
+            .secure(true)
+            .http_only(true)
+            .expires(
+                // If session id is nil, invalidate session
+                if uuid.is_nil() {
+                    Expiration::DateTime(OffsetDateTime::UNIX_EPOCH)
+                } else {
+                    Expiration::DateTime(OffsetDateTime::now_utc() + Duration::days(365))
+                    // FIXME: not so long?
+                },
             )
-            .into_response_parts(res)
+            .finish();
+
+        CookieJar::new().add(cookie).into_response_parts(res)
     }
 }
