@@ -1,17 +1,23 @@
-app = "spotify-backup"
+# fly.toml app configuration file generated for spotify-backup on 2023-04-19T08:51:59+02:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app            = "spotify-backup"
 primary_region = "ams"
 
-[env]
-RUST_LOG = "info,tower_http=debug,spotify_backup=debug,axum::rejection=trace,rspotify=warn"
-
-BIND   = "[::]:8080"
-DOMAIN = "backup.spotify.dusterthefirst.com"
-
-SPOTIFY_CLIENT_ID    = "be256626b1c24fc981ca6ed2c29b012f"
-SPOTIFY_REDIRECT_URI = "https://backup.spotify.dusterthefirst.com/login/spotify"
+[build]
+dockerfile = "./Dockerfile"
 
 [deploy]
-strategy = "canary"
+strategy = "rolling"
+
+[env]
+BIND                 = "[::]:8080"
+DOMAIN               = "backup.spotify.dusterthefirst.com"
+RUST_LOG             = "info,tower_http=debug,spotify_backup=debug,axum::rejection=trace,rspotify=warn"
+SPOTIFY_CLIENT_ID    = "be256626b1c24fc981ca6ed2c29b012f"
+SPOTIFY_REDIRECT_URI = "https://backup.spotify.dusterthefirst.com/login/spotify"
 
 [[services]]
 internal_port = 8080
@@ -21,6 +27,19 @@ protocol      = "tcp"
 hard_limit = 500
 soft_limit = 450
 type       = "connections"
+
+[[services.http_checks]]
+grace_period    = "5s"
+interval        = "10s"
+method          = "get"
+path            = "/health"
+protocol        = "http"
+restart_limit   = 0
+timeout         = "2s"
+tls_skip_verify = false
+
+[services.http_checks.headers]
+x-forwarded-host = "backup.spotify.dusterthefirst.com"
 
 [[services.ports]]
 force_https = true
@@ -36,16 +55,3 @@ grace_period  = "1s"
 interval      = "15s"
 restart_limit = 0
 timeout       = "2s"
-
-[[services.http_checks]]
-grace_period    = "5s"
-interval        = "10s"
-method          = "get"
-path            = "/health"
-protocol        = "http"
-restart_limit   = 0
-timeout         = "2s"
-tls_skip_verify = false
-
-[services.http_checks.headers]
-x-forwarded-host = "backup.spotify.dusterthefirst.com"
