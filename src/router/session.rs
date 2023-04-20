@@ -91,15 +91,13 @@ impl IntoResponseParts for UserSession {
             .same_site(SameSite::Lax)
             .secure(true)
             .http_only(true)
-            .expires(
+            .expires(if uuid.is_nil() {
                 // If session id is nil, invalidate session
-                if uuid.is_nil() {
-                    Expiration::DateTime(OffsetDateTime::UNIX_EPOCH)
-                } else {
-                    Expiration::Session
-                    // FIXME: not so long?
-                },
-            )
+                Expiration::DateTime(OffsetDateTime::UNIX_EPOCH)
+            } else {
+                // Else persist this cookie for the whole session
+                Expiration::Session
+            })
             .finish();
 
         CookieJar::new().add(cookie).into_response_parts(res)
