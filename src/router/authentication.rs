@@ -1,12 +1,12 @@
 use axum::{
     async_trait,
     extract::{FromRef, FromRequestParts, State},
-    http::{request, StatusCode},
+    http::request,
     response::{IntoResponse, Redirect, Response},
     RequestPartsExt,
 };
-use axum_extra::either::Either;
-use color_eyre::{eyre::Context, Report};
+use axum_extra::either::Either3;
+use color_eyre::eyre::Context;
 use sea_orm::prelude::Uuid;
 use time::OffsetDateTime;
 
@@ -25,7 +25,7 @@ pub async fn logout(
     session: Option<UserSession>,
 ) -> Result<Response, ErrorPage> {
     if let Some(session) = session {
-        let session = database.delete_user_session(session).await?;
+        let session = database.logout_user_session(session).await?;
 
         Ok((session, Redirect::to("/")).into_response())
     } else {
@@ -72,7 +72,7 @@ where
     Database: FromRef<S>,
     S: Sync,
 {
-    type Rejection = Either<Redirect, ErrorPage>;
+    type Rejection = Either3<Redirect, ErrorPage, UserSessionRejection>;
 
     async fn from_request_parts(
         parts: &mut request::Parts,
@@ -86,21 +86,18 @@ where
                     .get_user_session(user_session.id)
                     .await
                     .wrap_err("failed to get user session")
-                    .map_err(|error| Either::E2(error.into()))?
+                    .map_err(|error| Either3::E2(error.into()))?
                 {
                     return Ok(IncompleteUser { session, account });
                 }
             }
-            Err(UserSessionRejection::BadSessionCookie(error)) => {
-                // TODO: probably should be 400 not 500
-                return Err(Either::E2(ErrorPage::from(
-                    Report::new(error).wrap_err("unable to extract user session id"),
-                )));
-            }
             Err(UserSessionRejection::NoSessionCookie) => {}
+            Err(error) => {
+                return Err(Either3::E3(error));
+            }
         };
 
-        Err(Either::E1(Redirect::to("/")))
+        Err(Either3::E1(Redirect::to("/")))
     }
 }
 
@@ -124,7 +121,7 @@ where
     Database: FromRef<S>,
     S: Sync,
 {
-    type Rejection = Either<Redirect, ErrorPage>;
+    type Rejection = Either3<Redirect, ErrorPage, UserSessionRejection>;
 
     async fn from_request_parts(
         parts: &mut request::Parts,
@@ -135,7 +132,7 @@ where
             .and_then(|incomplete| {
                 incomplete
                     .into_complete()
-                    .map_err(|_incomplete| Either::E1(Redirect::to("/account")))
+                    .map_err(|_incomplete| Either3::E1(Redirect::to("/account")))
             })
     }
 }

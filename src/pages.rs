@@ -52,8 +52,7 @@ impl<'e> Page<'e> {
 
                 link { rel: "manifest", href: "/static/manifest.json" }
 
-                // FIXME: keep?
-                if cfg!(debug_assertions) {
+                if cfg!(feature = "live_js") {
                     rsx! {
                         script { src: "https://livejs.com/live.js#css,js" }
                     }

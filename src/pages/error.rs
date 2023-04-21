@@ -36,9 +36,6 @@ impl From<color_eyre::Report> for ErrorPage {
     }
 }
 
-// TODO: way to wrap handlers to always coerce errors to this page?
-// FIXME: error traces somehow
-// FIXME: use eyre?
 impl IntoResponse for ErrorPage {
     fn into_response(self) -> Response {
         let chain = self
@@ -47,25 +44,13 @@ impl IntoResponse for ErrorPage {
             .map(ToString::to_string)
             .collect::<Vec<_>>();
 
-        tracing::debug!(?chain); // FIXME more better print/log somehow
-        tracing::error!(?self.report, %self.caller, "encountered an error serving a page");
+        // FIXME: Send more info to sentry somehow
+        tracing::error!(?chain, %self.caller, "encountered an error serving a page");
 
         self::error(
             StatusCode::INTERNAL_SERVER_ERROR,
             if cfg!(debug_assertions) {
                 rsx! {
-                    // code {
-                    //     pre { "{self.report:?}" }
-                    // }
-                    // ul {
-                    //     for (i , source) in self.report.chain().enumerate() {
-                    //         li { key: "{i}",
-                    //             code {
-                    //                 pre { "{source:#?}" }
-                    //             }
-                    //         }
-                    //     }
-                    // }
                     dioxus_ansi::preformatted_ansi {
                         // FIXME: Allocation :(
                         ansi_text: format!("{:?}", self.report)
@@ -129,22 +114,6 @@ fn error<'a>(status: StatusCode, body: LazyNodes<'a, 'a>) -> (StatusCode, Page<'
                 nav {
                     a { href: "/", "return home" }
                 },
-                // TODO: what do with? why even have?
-                // footer {
-                //     section {
-                //         h4 { "Request ID" }
-                //         code { request_meta.request_id }
-                //     }
-                //     section {
-                //         h4 { "Region" }
-                //         request_meta.region
-                //     }
-                //     section {
-                //         h4 { "Server" }
-                //         code { "{request_meta.server.name} {request_meta.server.version}" }
-                //         code { "(commit " a { href:request_meta.server.source, target:"_blank", request_meta.server.commit } ")" }
-                //     }
-                // },
             },
         },
     )

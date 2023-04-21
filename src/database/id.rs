@@ -56,6 +56,7 @@ impl UserSessionId {
         self.0
     }
 
+    // TODO: do away with
     pub const fn from_raw(uuid: Uuid) -> Self {
         Self(uuid)
     }

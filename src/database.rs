@@ -48,14 +48,14 @@ impl Database {
         get_user_session(&self.connection, session).await
     }
 
-    pub async fn delete_user_session(
+    pub async fn logout_user_session(
         &self,
         session: crate::router::session::UserSession,
     ) -> Result<crate::router::session::UserSession, Report> {
         let transaction = self
             .connection
             .transaction::<_, _, DbErrReport>(|transaction| {
-                Box::pin(delete_user_session(transaction, session.id))
+                Box::pin(logout_user_session(transaction, session.id))
             })
             .await;
 
@@ -86,7 +86,7 @@ async fn get_user_session(
     }))
 }
 
-async fn delete_user_session(
+async fn logout_user_session(
     transaction: &DatabaseTransaction,
     session: UserSessionId,
 ) -> Result<(), DbErrReport> {
@@ -100,8 +100,16 @@ async fn delete_user_session(
             .await
             .wrap_err("deleting current session")?;
 
+        // Delete an incomplete account if this session points to it and is the last session pointing to it
+        let no_other_sessions = account
+            .find_related(UserSession)
+            .one(transaction)
+            .await
+            .wrap_err("finding other sessions of account")?
+            .is_none();
+
         // TODO: consolidate this with IncompleteUser???
-        if account.github.is_none() || account.spotify.is_none() {
+        if (account.github.is_none() || account.spotify.is_none()) && no_other_sessions {
             account
                 .delete(transaction)
                 .await
@@ -196,19 +204,31 @@ impl Database {
     }
 }
 
+/// This function will invalidate any session given to it, you must recreate a session after running this
+// TODO: reduce database calls?
+// FIXME: use type system to ensure account only deleted when wanted to be deleted (ie, session deletion account deletion propagation)
 pub async fn get_create_or_update_account(
     transaction: &DatabaseTransaction,
     model: account::ActiveModel,
     session: Option<UserSessionId>,
 ) -> Result<account::Model, DbErrReport> {
+    let spotify_filter = match &model.spotify {
+        ActiveValue::Set(Some(spotify)) | ActiveValue::Unchanged(Some(spotify)) => Some(spotify),
+        _ => None,
+    };
+
+    let github_filter = match &model.github {
+        ActiveValue::Set(Some(github)) | ActiveValue::Unchanged(Some(github)) => Some(github),
+        _ => None,
+    };
+
     // First, try to find an account associated with this model by filtering
     // by the provided service account
     let account = Account::find()
-        // FIXME: do not clone?F
-        .apply_if(model.spotify.clone().into_value(), |q, value| {
+        .apply_if(spotify_filter, |q, value| {
             q.filter(account::Column::Spotify.eq(value))
         })
-        .apply_if(model.github.clone().into_value(), |q, value| {
+        .apply_if(github_filter, |q, value| {
             q.filter(account::Column::Github.eq(value))
         })
         .one(transaction)
@@ -217,11 +237,28 @@ pub async fn get_create_or_update_account(
 
     // If an account already exists with this
     if let Some(account) = account {
-        // Delete old session and account if the user has one
-        if let Some(session) = session {
-            delete_user_session(transaction, session)
+        // Delete old session
+        if let Some(session_id) = session {
+            let session = UserSession::find_by_id(session_id.into_uuid())
+                .one(transaction)
                 .await
-                .wrap_err("deleting old user session")?;
+                .wrap_err("getting current session")?;
+
+            match session {
+                Some(session) if account.id == session.account => {
+                    // Invalidate the current session, but keep the account around
+                    session
+                        .delete(transaction)
+                        .await
+                        .wrap_err("deleting current session")?;
+                }
+                _ => {
+                    // Invalidate the current session removing any incomplete accounts
+                    logout_user_session(transaction, session_id)
+                        .await
+                        .wrap_err("deleting old user session")?;
+                }
+            }
         }
 
         return Ok(account);
@@ -263,5 +300,5 @@ pub async fn get_create_or_update_account(
     .await
     .wrap_err("creating new account")?;
 
-    return Ok(account);
+    Ok(account)
 }

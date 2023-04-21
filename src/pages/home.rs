@@ -7,7 +7,6 @@ use super::Page;
 pub async fn home(account: Option<IncompleteUser>) -> Page<'static> {
     let navigation = match account {
         Some(user) if user.is_complete() => rsx! {
-            // TODO: if incomplete, tell them to finish setting up account
             section {
                 h2 { "Welcome back" }
                 ul {
@@ -19,7 +18,7 @@ pub async fn home(account: Option<IncompleteUser>) -> Page<'static> {
         },
         Some(user) => rsx! {
             section {
-                h2 { "Welcome back" }
+                h2 { "Welcome" }
                 ul {
                     li { a { href: "/logout", "log out" } }
                     li { a { href: "/account", "finish setting up your account" } }

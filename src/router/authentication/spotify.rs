@@ -54,7 +54,7 @@ pub async fn login(
     query: Option<Query<SpotifyAuthCodeResponse>>,
 ) -> Result<Either<(UserSession, Redirect), Redirect>, ErrorPage> {
     let auth = AuthCodeSpotify::new(
-        spotify.credentials,
+        spotify.credentials.clone(),
         rspotify::OAuth {
             redirect_uri: spotify.redirect_uri.to_string(),
             scopes: scopes!("playlist-read-private", "user-library-read"),
@@ -89,7 +89,6 @@ pub async fn login(
                     .await
                     .expect("spotify client token mutex should not be poisoned");
 
-                // TODO: delete accounts that are not finished when logged off of them
                 let new_session = database
                     .login_user_by_spotify(
                         user_session.map(|s| s.id),

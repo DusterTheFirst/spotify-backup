@@ -9,7 +9,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar, Expiration, SameSite};
 use sea_orm::prelude::Uuid;
-use time::{Duration, OffsetDateTime};
+use time::OffsetDateTime;
 use tracing::debug;
 
 use crate::database::id::UserSessionId;
@@ -38,11 +38,19 @@ pub enum UserSessionRejection {
 impl IntoResponse for UserSessionRejection {
     fn into_response(self) -> axum::response::Response {
         match self {
-            UserSessionRejection::NoSessionCookie => StatusCode::UNAUTHORIZED.into_response(),
+            UserSessionRejection::NoSessionCookie => {
+                (StatusCode::UNAUTHORIZED, "Unauthorized").into_response()
+            }
             UserSessionRejection::BadSessionCookie(error) => {
                 debug!(?error, "user has bad session cookie");
 
-                StatusCode::BAD_REQUEST.into_response()
+                // Delete the bad session cookie from the user agent
+                (
+                    StatusCode::BAD_REQUEST,
+                    UserSession::remove(),
+                    "Bad Session Cookie",
+                )
+                    .into_response()
             }
         }
     }
@@ -54,7 +62,7 @@ impl<S> FromRequestParts<S> for UserSession {
 
     async fn from_request_parts(
         parts: &mut axum::http::request::Parts,
-        state: &S,
+        _state: &S,
     ) -> Result<Self, Self::Rejection> {
         let cookies = parts
             .extract::<CookieJar>()
@@ -62,7 +70,6 @@ impl<S> FromRequestParts<S> for UserSession {
             .expect("cookie jar should never fail");
 
         if let Some(cookie) = cookies.get(SESSION_COOKIE) {
-            // FIXME: delete bad session cookes from user agent?
             let uuid = cookie
                 .value()
                 .parse()
