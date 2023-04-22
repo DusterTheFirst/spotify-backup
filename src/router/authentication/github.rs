@@ -1,4 +1,4 @@
-use axum::{http::StatusCode, extract::State};
+use axum::{extract::State, http::StatusCode};
 
 use crate::GithubEnvironment;
 
