@@ -5,6 +5,7 @@
 use std::{borrow::Cow, env, net::SocketAddr, path::PathBuf};
 
 use axum::http::{uri::Authority, Uri};
+use octocrab::{models::AppId, Octocrab};
 use tracing_subscriber::{prelude::*, EnvFilter};
 
 mod database;
@@ -60,7 +61,52 @@ impl SpotifyEnvironment {
 }
 
 #[derive(Debug, Clone)]
-pub struct GithubEnvironment {}
+// TODO: secrecy crate
+pub struct GithubEnvironment {
+    oauth_credentials: rspotify::Credentials,
+    app_auth: octocrab::auth::AppAuth,
+    client: Octocrab,
+}
+
+impl GithubEnvironment {
+    pub fn from_env() -> Self {
+        let app_id: AppId = env::var("GITHUB_APP_ID")
+            .expect("$GITHUB_APP_ID should be set")
+            .parse::<u64>()
+            .expect("$GITHUB_APP_ID should be a valid app id")
+            .into();
+
+        let key_path: PathBuf = env::var_os("GITHUB_PRIVATE_KEY")
+            .expect("$GITHUB_PRIVATE_KEY should be set")
+            .into();
+
+        let key_contents = std::fs::read(key_path).expect("$GITHUB_PRIVATE_KEY should be read in");
+
+        let encoding_key = jsonwebtoken::EncodingKey::from_rsa_pem(&key_contents)
+            .expect("encoding key should be valid RSA PEM");
+
+        let client = Octocrab::builder()
+            .app(app_id, encoding_key.clone())
+            // .retry_predicate(|_| true) // TODO: this could be cool
+            .build()
+            .expect("github environment should be valid");
+
+        GithubEnvironment {
+            client,
+            app_auth: octocrab::auth::AppAuth {
+                app_id,
+                key: encoding_key,
+            },
+            // TODO: manual oauth :(
+            oauth_credentials: rspotify::Credentials {
+                id: env::var("GITHUB_CLIENT_ID").expect("$GITHUB_CLIENT_ID should be set"),
+                secret: Some(
+                    env::var("GITHUB_CLIENT_SECRET").expect("$GITHUB_CLIENT_SECRET should be set"),
+                ),
+            },
+        }
+    }
+}
 
 fn main() -> Result<(), color_eyre::Report> {
     color_eyre::install()?;
@@ -100,6 +146,6 @@ fn main() -> Result<(), color_eyre::Report> {
         .block_on(router::router(
             HttpEnvironment::from_env(),
             SpotifyEnvironment::from_env(),
-            GithubEnvironment {},
+            GithubEnvironment::from_env(),
         ))
 }

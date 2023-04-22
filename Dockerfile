@@ -25,8 +25,11 @@ RUN set -eux; \
 FROM gcr.io/distroless/cc AS runtime
 
 COPY --from=builder /app/spotify-backup /spotify-backup
-COPY --from=builder /app/static /static
 
 ENV STATIC_DIR="/static"
+COPY ./static /static
+
+ENV GITHUB_PRIVATE_KEY="/spotify-backup.private-key.pem"
+COPY ./spotify-backup.private-key.pem /spotify-backup.private-key.pem
 
 CMD ["/spotify-backup"]

@@ -1,7 +1,4 @@
-# fly.toml app configuration file generated for spotify-backup on 2023-04-19T08:51:59+02:00
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
+# https://fly.io/docs/reference/configuration/
 
 app            = "spotify-backup"
 primary_region = "ams"
@@ -13,11 +10,17 @@ dockerfile = "./Dockerfile"
 strategy = "rolling"
 
 [env]
-BIND                 = "[::]:8080"
-DOMAIN               = "backup.spotify.dusterthefirst.com"
-RUST_LOG             = "info,tower_http=debug,spotify_backup=debug,axum::rejection=trace,rspotify=warn"
+BIND   = "[::]:8080"
+DOMAIN = "backup.spotify.dusterthefirst.com"
+
+RUST_LOG = "info,tower_http=debug,spotify_backup=debug,axum::rejection=trace,rspotify=warn"
+
 SPOTIFY_CLIENT_ID    = "be256626b1c24fc981ca6ed2c29b012f"
 SPOTIFY_REDIRECT_URI = "https://backup.spotify.dusterthefirst.com/login/spotify"
+
+GITHUB_APP_ID       = "322654"
+GITHUB_CLIENT_ID    = "Iv1.64e968ca762f6e3f"
+GITHUB_REDIRECT_URI = "https://backup.spotify.dusterthefirst.com/login/github"
 
 [[services]]
 internal_port = 8080
