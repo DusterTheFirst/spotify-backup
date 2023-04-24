@@ -2,38 +2,140 @@ use axum::{
     extract::{Query, State},
     response::Redirect,
 };
+use axum_extra::either::Either;
+use color_eyre::eyre::{eyre, Context};
+use monostate::MustBe;
 use serde::Deserialize;
+use time::{Duration, OffsetDateTime};
+use tracing::{debug, trace};
 
-use crate::{router::session::UserSession, GithubEnvironment};
+use crate::{
+    pages::ErrorPage,
+    router::{session::UserSession, AppState},
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum GithubAuthCodeResponse {
     Success {
         code: String,
-        state: String,
     },
     Failure {
         error: String,
         error_description: String,
         error_uri: String,
-        state: String,
     },
 }
 
+#[derive(Debug, Deserialize)]
+struct GithubAccessToken {
+    access_token: String,
+    expires_in: i64, // 28800
+    refresh_token: String,
+    refresh_token_expires_in: i64, // 15811200
+    scope: MustBe!(""),
+    token_type: MustBe!("bearer"),
+}
+
 pub async fn login(
-    State(state): State<GithubEnvironment>,
+    State(AppState {
+        github,
+        database,
+        reqwest,
+        ..
+    }): State<AppState>,
     user_session: Option<UserSession>,
     query: Option<Query<GithubAuthCodeResponse>>,
-) -> Redirect {
-    let client_id = state.oauth_credentials.id;
-    let redirect_uri = state.redirect_uri;
-
+) -> Result<Either<(UserSession, Redirect), Redirect>, ErrorPage> {
     if let Some(Query(response)) = query {
-        todo!();
-    }
+        match response {
+            GithubAuthCodeResponse::Failure {
+                error,
+                error_description,
+                error_uri,
+            } => {
+                debug!(
+                    ?error,
+                    ?error_description,
+                    ?error_uri,
+                    "failed github oauth"
+                );
 
-    Redirect::to(&format!(
-        "https://github.com/login/oauth/authorize?client_id={client_id}&redirect_uri={redirect_uri}"
-    ))
+                Err(eyre!("github authentication did not succeed: {error} {error_description} {error_uri}").into())
+            }
+            GithubAuthCodeResponse::Success { code } => {
+                trace!("succeeded github oauth");
+
+                // TODO: use client
+                let token = reqwest
+                    .get("https://github.com/login/oauth/access_token")
+                    .query(&[
+                        ("client_id", github.client_id),
+                        ("client_secret", github.client_secret),
+                        ("redirect_uri", github.redirect_uri.to_string()),
+                        ("code", code),
+                    ])
+                    .send()
+                    .await
+                    .wrap_err("exchanging authorization code (request)")?
+                    .error_for_status()
+                    .wrap_err("exchanging authorization code (status)")?
+                    .json::<GithubAccessToken>()
+                    .await
+                    .wrap_err("decoding github access_token response")?;
+
+                let token_created_at = OffsetDateTime::now_utc();
+                dbg!(&token);
+
+                let client = octocrab::OctocrabBuilder::new()
+                    .oauth(octocrab::auth::OAuth {
+                        access_token: token.access_token.clone().into(),
+                        token_type: "bearer".to_string(),
+                        scope: Vec::new(),
+                    })
+                    .build()
+                    .wrap_err("building octocrab client")?;
+
+                let user = client
+                    .current()
+                    .user()
+                    .await
+                    .wrap_err("getting current user")?;
+
+                dbg!(&user);
+
+                let new_session = database
+                    .login_user_by_github(
+                        user_session.map(|s| s.id),
+                        entity::github_auth::Model {
+                            // Postgres does not have u64 :(
+                            user_id: user.id.0.to_string(),
+                            access_token: token.access_token,
+                            expires_at: token_created_at + Duration::seconds(token.expires_in),
+                            refresh_token: token.refresh_token,
+                            refresh_token_expires_at: token_created_at
+                                + Duration::seconds(token.refresh_token_expires_in),
+                            created_at: token_created_at,
+                        },
+                    )
+                    .await
+                    .wrap_err("logging in github account")?;
+
+                Ok(Either::E1((
+                    UserSession { id: new_session },
+                    Redirect::to("/account"),
+                )))
+            }
+        }
+    } else {
+        todo!(
+            "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}",
+            github.client_id,
+            github.redirect_uri
+        )
+        // Ok(Either::E2(Redirect::to(&format!(
+        //     "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}",
+        //     github.client_id, github.redirect_uri
+        // ))))
+    }
 }

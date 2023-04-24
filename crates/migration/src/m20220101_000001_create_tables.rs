@@ -24,11 +24,6 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(
-                        ColumnDef::new(SpotifyAuth::Created)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(
                         ColumnDef::new(SpotifyAuth::RefreshToken)
                             .string()
                             .not_null(),
@@ -36,6 +31,11 @@ impl MigrationTrait for Migration {
                     .col(
                         ColumnDef::new(SpotifyAuth::Scopes)
                             .array(ColumnType::String(None))
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(SpotifyAuth::CreatedAt)
+                            .timestamp_with_time_zone()
                             .not_null(),
                     )
                     .to_owned(),
@@ -59,15 +59,15 @@ impl MigrationTrait for Migration {
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
+                    .col(ColumnDef::new(GithubAuth::RefreshToken).string().not_null())
                     .col(
-                        ColumnDef::new(GithubAuth::Created)
+                        ColumnDef::new(GithubAuth::RefreshTokenExpiresAt)
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(GithubAuth::RefreshToken).string().not_null())
                     .col(
-                        ColumnDef::new(GithubAuth::Scopes)
-                            .array(ColumnType::String(None))
+                        ColumnDef::new(GithubAuth::CreatedAt)
+                            .timestamp_with_time_zone()
                             .not_null(),
                     )
                     .to_owned(),
@@ -102,7 +102,7 @@ impl MigrationTrait for Migration {
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .col(
-                        ColumnDef::new(Account::Created)
+                        ColumnDef::new(Account::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
@@ -122,7 +122,7 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(
-                        ColumnDef::new(UserSession::Created)
+                        ColumnDef::new(UserSession::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
@@ -168,7 +168,7 @@ enum SpotifyAuth {
     ExpiresAt,
     RefreshToken,
     Scopes,
-    Created,
+    CreatedAt,
 }
 
 #[derive(Iden)]
@@ -178,8 +178,8 @@ enum GithubAuth {
     AccessToken,
     ExpiresAt,
     RefreshToken,
-    Scopes,
-    Created,
+    RefreshTokenExpiresAt,
+    CreatedAt,
 }
 
 #[derive(Iden)]
@@ -188,7 +188,7 @@ enum Account {
     Id,
     Spotify,
     Github,
-    Created,
+    CreatedAt,
 }
 
 #[derive(Iden)]
@@ -196,6 +196,6 @@ enum UserSession {
     Table,
     Id,
     Account,
-    Created,
+    CreatedAt,
     LastSeen,
 }

@@ -42,7 +42,7 @@ pub fn from_rspotify(
             .expect("rspotify token should contain refresh token"),
         scopes: token.scopes.into_iter().collect(),
         user_id: user_id.id().to_string(),
-        created: OffsetDateTime::now_utc(),
+        created_at: OffsetDateTime::now_utc(),
     }
 }
 
@@ -65,12 +65,12 @@ pub async fn login(
     if let Some(Query(response)) = query {
         match response {
             SpotifyAuthCodeResponse::Failure { error, state } => {
-                debug!(?error, "failed spotify login");
+                debug!(?error, "failed spotify oauth");
 
-                return Err(eyre!("spotify authentication did not succeed: {error}").into());
+                Err(eyre!("spotify authentication did not succeed: {error}").into())
             }
             SpotifyAuthCodeResponse::Success { code, state } => {
-                trace!("succeeded spotify login");
+                trace!("succeeded spotify oauth");
 
                 auth.request_token(&code)
                     .await
@@ -100,17 +100,17 @@ pub async fn login(
                     .await
                     .wrap_err("failed to login to spotify account")?;
 
-                return Ok(Either::E1((
+                Ok(Either::E1((
                     UserSession { id: new_session },
                     Redirect::to("/account"),
-                )));
+                )))
             }
         }
+    } else {
+        let auth_url = auth
+            .get_authorize_url(true)
+            .expect("authorization url should be valid");
+
+        Ok(Either::E2(Redirect::to(&auth_url)))
     }
-
-    let auth_url = auth
-        .get_authorize_url(true)
-        .expect("authorization url should be valid");
-
-    Ok(Either::E2(Redirect::to(&auth_url)))
 }

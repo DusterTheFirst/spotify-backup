@@ -63,7 +63,9 @@ impl SpotifyEnvironment {
 #[derive(Debug, Clone)]
 // TODO: secrecy crate
 pub struct GithubEnvironment {
-    oauth_credentials: rspotify::Credentials,
+    // Oauth
+    client_id: String,
+    client_secret: String,
     redirect_uri: Uri,
 
     app_auth: octocrab::auth::AppAuth,
@@ -100,12 +102,9 @@ impl GithubEnvironment {
                 key: encoding_key,
             },
             // TODO: manual oauth :(
-            oauth_credentials: rspotify::Credentials {
-                id: env::var("GITHUB_CLIENT_ID").expect("$GITHUB_CLIENT_ID should be set"),
-                secret: Some(
-                    env::var("GITHUB_CLIENT_SECRET").expect("$GITHUB_CLIENT_SECRET should be set"),
-                ),
-            },
+            client_id: env::var("GITHUB_CLIENT_ID").expect("$GITHUB_CLIENT_ID should be set"),
+            client_secret: env::var("GITHUB_CLIENT_SECRET")
+                .expect("$GITHUB_CLIENT_SECRET should be set"),
             redirect_uri: env::var("GITHUB_REDIRECT_URI")
                 .expect("$GITHUB_REDIRECT_URI should be set")
                 .parse()

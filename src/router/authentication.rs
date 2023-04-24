@@ -57,7 +57,7 @@ impl IncompleteUser {
                     id: self.account.id,
                     spotify: SpotifyUserId::from_raw(std::mem::take(spotify)),
                     github: (), // FIXME: TODO:
-                    created: self.account.created,
+                    created_at: self.account.created_at,
                 },
             })
         } else {
@@ -112,7 +112,7 @@ pub struct CompleteAccount {
     pub id: Uuid,
     pub spotify: SpotifyUserId,
     pub github: (), // GithubUserId
-    pub created: OffsetDateTime,
+    pub created_at: OffsetDateTime,
 }
 
 #[async_trait]

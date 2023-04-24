@@ -31,6 +31,7 @@ pub struct AppState {
     pub database: Database,
     pub spotify: SpotifyEnvironment,
     pub github: GithubEnvironment,
+    pub reqwest: reqwest::Client,
 }
 
 pub async fn router(
@@ -46,6 +47,19 @@ pub async fn router(
         database,
         spotify,
         github,
+        reqwest: reqwest::Client::builder()
+            .brotli(true)
+            .gzip(true)
+            .deflate(true)
+            .https_only(true)
+            .use_rustls_tls()
+            .user_agent(concat!(
+                env!("CARGO_PKG_NAME"),
+                "/",
+                env!("CARGO_PKG_VERSION"),
+            ))
+            .build()
+            .expect("failed to create reqwest client"),
     };
 
     let app = Router::new()

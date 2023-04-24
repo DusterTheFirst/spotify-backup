@@ -20,12 +20,20 @@ live_js = []
 members  = ["crates/*"]
 resolver = "2"
 
+[patch.crates-io]
+# https://github.com/DioxusLabs/dioxus/issues/979
+dioxus            = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
+dioxus-core       = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
+dioxus-core-macro = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
+dioxus-rsx        = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
+dioxus-ssr        = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
+
 [workspace.dependencies]
 sea-orm = { version = "0.11.2", default-features = false, features = ["debug-print", "macros", "postgres-array", "runtime-tokio-rustls", "sqlx-postgres", "with-time", "with-uuid"] }
 
 [dependencies]
 # Web
-axum        = { version = "0.6.15", features = ["macros", "original-uri", "tracing"] }
+axum        = { version = "0.6.15", features = ["headers", "macros", "original-uri", "tracing"] }
 axum-extra  = { version = "0.7.3", features = ["cookie"] }
 dioxus      = { version = "0.3.2", default-features = false, features = ["html", "macro"] }
 dioxus-ansi = { path = "crates/dioxus-ansi" }
@@ -38,7 +46,9 @@ lettre = { version = "0.10.4", default-features = false, features = ["builder", 
 
 # Github
 jsonwebtoken = "8.3.0"
+monostate    = "0.1.6"
 octocrab     = { version = "0.19.0", default-features = false, features = ["rustls", "stream"] }
+reqwest      = { version = "0.11.16", default-features = false, features = ["brotli", "deflate", "gzip", "json", "rustls-tls"] }
 
 # Spotify
 rspotify = { version = "0.11.6", default-features = false, features = ["client-reqwest", "reqwest-rustls-tls"] }

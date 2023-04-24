@@ -11,7 +11,7 @@ pub struct Model {
     pub spotify: Option<String>,
     #[sea_orm(unique)]
     pub github: Option<String>,
-    pub created: TimeDateTimeWithTimeZone,
+    pub created_at: TimeDateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

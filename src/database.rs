@@ -4,11 +4,11 @@ use std::{
 };
 
 use color_eyre::{eyre::Context, Report};
-use entity::{account, prelude::*, spotify_auth, user_session};
+use entity::{account, github_auth, prelude::*, spotify_auth, user_session};
 use migration::{Migrator, MigratorTrait, OnConflict};
 use sea_orm::{
-    prelude::*, ActiveValue, ConnectOptions, DatabaseTransaction, IntoActiveModel, Iterable,
-    QueryTrait, TransactionError, TransactionTrait,
+    prelude::*, ActiveValue, ConnectOptions, DatabaseTransaction, IntoActiveModel, QueryTrait,
+    TransactionError, TransactionTrait,
 };
 use time::OffsetDateTime;
 use tracing::info;
@@ -161,7 +161,13 @@ impl Database {
                     SpotifyAuth::insert(spotify_auth.into_active_model())
                         .on_conflict(
                             OnConflict::column(spotify_auth::Column::UserId)
-                                .update_columns(spotify_auth::Column::iter())
+                                // Do not update created_at
+                                .update_columns([
+                                    spotify_auth::Column::AccessToken,
+                                    spotify_auth::Column::ExpiresAt,
+                                    spotify_auth::Column::RefreshToken,
+                                    spotify_auth::Column::Scopes,
+                                ])
                                 .to_owned(),
                         )
                         .exec_with_returning(transaction)
@@ -182,7 +188,69 @@ impl Database {
                     // TODO: session pruning periodically
                     let new_session = UserSession::insert(
                         user_session::Model {
-                            created: OffsetDateTime::now_utc(),
+                            created_at: OffsetDateTime::now_utc(),
+                            last_seen: OffsetDateTime::now_utc(),
+                            id: Uuid::new_v4(),
+                            account: account.id,
+                        }
+                        .into_active_model(),
+                    )
+                    .exec_with_returning(transaction)
+                    .await
+                    .wrap_err("creating new user session")?;
+
+                    Ok(UserSessionId::from_user_session(new_session))
+                })
+            })
+            .await
+            .map_err(|error| match error {
+                TransactionError::Connection(error) => Report::new(error),
+                TransactionError::Transaction(error) => error.0,
+            })
+    }
+
+    pub async fn login_user_by_github(
+        &self,
+        session: Option<UserSessionId>,
+        github_auth: entity::github_auth::Model, // TODO: do not expose?
+    ) -> Result<UserSessionId, Report> {
+        self.connection
+            .transaction::<_, _, DbErrReport>(|transaction| {
+                Box::pin(async move {
+                    let user_id = github_auth.user_id.clone();
+
+                    // Update the saved spotify authentication details for this user
+                    GithubAuth::insert(github_auth.into_active_model())
+                        .on_conflict(
+                            OnConflict::column(github_auth::Column::UserId)
+                                // Do not update created_at
+                                .update_columns([
+                                    github_auth::Column::AccessToken,
+                                    github_auth::Column::ExpiresAt,
+                                    github_auth::Column::RefreshToken,
+                                    github_auth::Column::RefreshTokenExpiresAt,
+                                ])
+                                .to_owned(),
+                        )
+                        .exec_with_returning(transaction)
+                        .await
+                        .wrap_err("updating saved github authentication details")?;
+
+                    let account = get_create_or_update_account(
+                        transaction,
+                        account::ActiveModel {
+                            github: ActiveValue::Set(Some(user_id)),
+                            ..Default::default()
+                        },
+                        session,
+                    )
+                    .await
+                    .wrap_err("updating account")?;
+
+                    // TODO: session pruning periodically
+                    let new_session = UserSession::insert(
+                        user_session::Model {
+                            created_at: OffsetDateTime::now_utc(),
                             last_seen: OffsetDateTime::now_utc(),
                             id: Uuid::new_v4(),
                             account: account.id,
@@ -293,7 +361,7 @@ pub async fn get_create_or_update_account(
     // If there is no current account, create one
     let account = Account::insert(account::ActiveModel {
         id: ActiveValue::Set(Uuid::new_v4()),
-        created: ActiveValue::Set(OffsetDateTime::now_utc()),
+        created_at: ActiveValue::Set(OffsetDateTime::now_utc()),
         ..model
     })
     .exec_with_returning(transaction)

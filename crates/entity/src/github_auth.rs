@@ -9,9 +9,9 @@ pub struct Model {
     pub user_id: String,
     pub access_token: String,
     pub expires_at: TimeDateTimeWithTimeZone,
-    pub created: TimeDateTimeWithTimeZone,
     pub refresh_token: String,
-    pub scopes: Vec<String>,
+    pub refresh_token_expires_at: TimeDateTimeWithTimeZone,
+    pub created_at: TimeDateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
