@@ -66,8 +66,7 @@ pub async fn login(
             GithubAuthCodeResponse::Success { code } => {
                 trace!("succeeded github oauth");
 
-                // TODO: use client
-                let token = reqwest
+                let response = reqwest
                     .get("https://github.com/login/oauth/access_token")
                     .query(&[
                         ("client_id", github.client_id),
@@ -79,7 +78,10 @@ pub async fn login(
                     .await
                     .wrap_err("exchanging authorization code (request)")?
                     .error_for_status()
-                    .wrap_err("exchanging authorization code (status)")?
+                    .wrap_err("exchanging authorization code (status)")?;
+
+                // TODO: manual serde
+                let token = response
                     .json::<GithubAccessToken>()
                     .await
                     .wrap_err("decoding github access_token response")?;

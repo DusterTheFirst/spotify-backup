@@ -2719,6 +2719,7 @@ dependencies = [
  "sea-orm",
  "sentry",
  "serde",
+ "serde_json",
  "time 0.3.20",
  "tokio",
  "tower",
