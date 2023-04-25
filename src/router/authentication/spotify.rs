@@ -13,7 +13,7 @@ use time::OffsetDateTime;
 use tracing::{debug, trace};
 
 use crate::{
-    pages::ErrorPage,
+    pages::InternalServerError,
     router::{session::UserSession, AppState},
 };
 
@@ -52,7 +52,7 @@ pub async fn login(
     }): State<AppState>,
     user_session: Option<UserSession>,
     query: Option<Query<SpotifyAuthCodeResponse>>,
-) -> Result<Either<(UserSession, Redirect), Redirect>, ErrorPage> {
+) -> Result<Either<(UserSession, Redirect), Redirect>, InternalServerError> {
     let auth = AuthCodeSpotify::new(
         spotify.credentials.clone(),
         rspotify::OAuth {

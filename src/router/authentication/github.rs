@@ -3,19 +3,24 @@ use axum::{
     response::Redirect,
 };
 use axum_extra::either::Either;
-use color_eyre::eyre::{eyre, Context};
+use color_eyre::{
+    eyre::{eyre, Context},
+    Help, SectionExt,
+};
 use monostate::MustBe;
+use reqwest::header;
 use serde::Deserialize;
 use time::{Duration, OffsetDateTime};
 use tracing::{debug, trace};
 
 use crate::{
-    pages::ErrorPage,
+    pages::InternalServerError,
     router::{session::UserSession, AppState},
+    util::UntaggedResult,
 };
 
 #[derive(Debug, Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, deny_unknown_fields)]
 pub enum GithubAuthCodeResponse {
     Success {
         code: String,
@@ -37,6 +42,13 @@ struct GithubAccessToken {
     token_type: MustBe!("bearer"),
 }
 
+#[derive(Debug, Deserialize)]
+struct GithubAccessTokenError {
+    error: String,
+    error_description: String,
+    error_uri: String,
+}
+
 pub async fn login(
     State(AppState {
         github,
@@ -46,7 +58,7 @@ pub async fn login(
     }): State<AppState>,
     user_session: Option<UserSession>,
     query: Option<Query<GithubAuthCodeResponse>>,
-) -> Result<Either<(UserSession, Redirect), Redirect>, ErrorPage> {
+) -> Result<Either<(UserSession, Redirect), Redirect>, InternalServerError> {
     if let Some(Query(response)) = query {
         match response {
             GithubAuthCodeResponse::Failure {
@@ -66,6 +78,7 @@ pub async fn login(
             GithubAuthCodeResponse::Success { code } => {
                 trace!("succeeded github oauth");
 
+                // FIXME: mess, use octocrab?
                 let response = reqwest
                     .get("https://github.com/login/oauth/access_token")
                     .query(&[
@@ -74,17 +87,28 @@ pub async fn login(
                         ("redirect_uri", github.redirect_uri.to_string()),
                         ("code", code),
                     ])
+                    .header(header::ACCEPT, "application/json")
                     .send()
                     .await
                     .wrap_err("exchanging authorization code (request)")?
                     .error_for_status()
                     .wrap_err("exchanging authorization code (status)")?;
 
+                dbg!(response.headers().get(header::CONTENT_TYPE));
+
                 // TODO: manual serde
-                let token = response
-                    .json::<GithubAccessToken>()
+                let token_json = response
+                    .text()
                     .await
-                    .wrap_err("decoding github access_token response")?;
+                    .wrap_err("receiving github access_token response")?;
+
+                let token = serde_json::from_str::<
+                    UntaggedResult<GithubAccessToken, GithubAccessTokenError>,
+                >(&token_json)
+                .wrap_err("deserializing github access_token response")
+                .with_section(|| token_json.header("JSON"))?
+                .0
+                .map_err(|error| eyre!("github api error: {error:?}"))?;
 
                 let token_created_at = OffsetDateTime::now_utc();
                 dbg!(&token);

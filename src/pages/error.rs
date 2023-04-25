@@ -21,12 +21,28 @@ pub fn not_found(path: &str) -> Response {
     .into_response()
 }
 
-pub struct ErrorPage {
+pub struct ClientError {
+    pub message: String,
+}
+
+impl IntoResponse for ClientError {
+    fn into_response(self) -> Response {
+        self::error(
+            StatusCode::BAD_REQUEST,
+            rsx! {
+                div { self.message }
+            },
+        )
+        .into_response()
+    }
+}
+
+pub struct InternalServerError {
     report: color_eyre::Report,
     caller: Location,
 }
 
-impl From<color_eyre::Report> for ErrorPage {
+impl From<color_eyre::Report> for InternalServerError {
     #[track_caller]
     fn from(value: color_eyre::Report) -> Self {
         Self {
@@ -36,7 +52,7 @@ impl From<color_eyre::Report> for ErrorPage {
     }
 }
 
-impl IntoResponse for ErrorPage {
+impl IntoResponse for InternalServerError {
     fn into_response(self) -> Response {
         let chain = self
             .report

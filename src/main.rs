@@ -11,6 +11,7 @@ use tracing_subscriber::{prelude::*, EnvFilter};
 mod database;
 mod pages;
 mod router;
+mod util;
 
 pub struct HttpEnvironment {
     bind: SocketAddr,

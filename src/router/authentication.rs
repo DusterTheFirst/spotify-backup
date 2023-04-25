@@ -12,7 +12,7 @@ use time::OffsetDateTime;
 
 use crate::{
     database::{id::SpotifyUserId, Database},
-    pages::ErrorPage,
+    pages::InternalServerError,
 };
 
 use super::session::{UserSession, UserSessionRejection};
@@ -23,7 +23,7 @@ pub mod spotify;
 pub async fn logout(
     State(database): State<Database>,
     session: Option<UserSession>,
-) -> Result<Response, ErrorPage> {
+) -> Result<Response, InternalServerError> {
     if let Some(session) = session {
         let session = database.logout_user_session(session).await?;
 
@@ -72,7 +72,7 @@ where
     Database: FromRef<S>,
     S: Sync,
 {
-    type Rejection = Either3<Redirect, ErrorPage, UserSessionRejection>;
+    type Rejection = Either3<Redirect, InternalServerError, UserSessionRejection>;
 
     async fn from_request_parts(
         parts: &mut request::Parts,
@@ -121,7 +121,7 @@ where
     Database: FromRef<S>,
     S: Sync,
 {
-    type Rejection = Either3<Redirect, ErrorPage, UserSessionRejection>;
+    type Rejection = Either3<Redirect, InternalServerError, UserSessionRejection>;
 
     async fn from_request_parts(
         parts: &mut request::Parts,
