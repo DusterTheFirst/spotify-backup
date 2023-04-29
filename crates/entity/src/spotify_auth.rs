@@ -10,7 +10,6 @@ pub struct Model {
     pub access_token: String,
     pub expires_at: TimeDateTimeWithTimeZone,
     pub refresh_token: String,
-    pub scopes: Vec<String>,
     pub created_at: TimeDateTimeWithTimeZone,
 }
 

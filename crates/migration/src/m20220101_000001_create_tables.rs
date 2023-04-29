@@ -29,11 +29,6 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(
-                        ColumnDef::new(SpotifyAuth::Scopes)
-                            .array(ColumnType::String(None))
-                            .not_null(),
-                    )
-                    .col(
                         ColumnDef::new(SpotifyAuth::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null(),
@@ -54,17 +49,6 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(ColumnDef::new(GithubAuth::AccessToken).string().not_null())
-                    .col(
-                        ColumnDef::new(GithubAuth::ExpiresAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .col(ColumnDef::new(GithubAuth::RefreshToken).string().not_null())
-                    .col(
-                        ColumnDef::new(GithubAuth::RefreshTokenExpiresAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
                     .col(
                         ColumnDef::new(GithubAuth::CreatedAt)
                             .timestamp_with_time_zone()
@@ -167,7 +151,6 @@ enum SpotifyAuth {
     AccessToken,
     ExpiresAt,
     RefreshToken,
-    Scopes,
     CreatedAt,
 }
 
@@ -176,9 +159,6 @@ enum GithubAuth {
     Table,
     UserId,
     AccessToken,
-    ExpiresAt,
-    RefreshToken,
-    RefreshTokenExpiresAt,
     CreatedAt,
 }
 

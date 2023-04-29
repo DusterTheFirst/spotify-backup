@@ -7,10 +7,9 @@ use color_eyre::{
     eyre::{eyre, Context},
     Help, SectionExt,
 };
-use monostate::MustBe;
 use reqwest::header;
 use serde::Deserialize;
-use time::{Duration, OffsetDateTime};
+use time::OffsetDateTime;
 use tracing::{debug, trace};
 
 use crate::{
@@ -35,11 +34,8 @@ pub enum GithubAuthCodeResponse {
 #[derive(Debug, Deserialize)]
 struct GithubAccessToken {
     access_token: String,
-    expires_in: i64, // 28800
-    refresh_token: String,
-    refresh_token_expires_in: i64, // 15811200
-    scope: MustBe!(""),
-    token_type: MustBe!("bearer"),
+    scope: String,
+    token_type: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,6 +84,7 @@ pub async fn login(
                         ("code", code),
                     ])
                     .header(header::ACCEPT, "application/json")
+                    .header("X-GitHub-Api-Version", "2022-11-28")
                     .send()
                     .await
                     .wrap_err("exchanging authorization code (request)")?
@@ -102,22 +99,40 @@ pub async fn login(
                     .await
                     .wrap_err("receiving github access_token response")?;
 
-                let token = serde_json::from_str::<
+                let oauth = serde_json::from_str::<
                     UntaggedResult<GithubAccessToken, GithubAccessTokenError>,
                 >(&token_json)
                 .wrap_err("deserializing github access_token response")
-                .with_section(|| token_json.header("JSON"))?
+                .with_section(|| token_json.clone().header("JSON"))?
                 .0
-                .map_err(|error| eyre!("github api error: {error:?}"))?;
+                .map_err(|error| {
+                    eyre!("Github API endpoint returned an error")
+                        .with_section(|| error.error.header("API Error"))
+                        .with_section(|| error.error_description.header("Error Description"))
+                        .with_section(|| error.error_uri.header("Error Uri"))
+                })?;
+
+                if oauth.scope.is_empty() {
+                    return Err(eyre!("github oauth scopes is not empty")
+                        // FIXME: replace with tracing spans?
+                        .with_section(|| token_json.clone().header("JSON"))
+                        .with_section(|| format!("{:?}", oauth.scope).header("scope"))
+                        .into());
+                }
+                if !oauth.token_type.eq_ignore_ascii_case("bearer") {
+                    return Err(eyre!("github oauth token type is not bearer")
+                        .with_section(|| token_json.clone().header("JSON"))
+                        .with_section(|| format!("{:?}", oauth.token_type).header("token_type"))
+                        .into());
+                }
 
                 let token_created_at = OffsetDateTime::now_utc();
-                dbg!(&token);
 
                 let client = octocrab::OctocrabBuilder::new()
                     .oauth(octocrab::auth::OAuth {
-                        access_token: token.access_token.clone().into(),
-                        token_type: "bearer".to_string(),
-                        scope: Vec::new(),
+                        access_token: oauth.access_token.into(),
+                        token_type: "bearer".into(),
+                        scope: vec![],
                     })
                     .build()
                     .wrap_err("building octocrab client")?;
@@ -136,11 +151,7 @@ pub async fn login(
                         entity::github_auth::Model {
                             // Postgres does not have u64 :(
                             user_id: user.id.0.to_string(),
-                            access_token: token.access_token,
-                            expires_at: token_created_at + Duration::seconds(token.expires_in),
-                            refresh_token: token.refresh_token,
-                            refresh_token_expires_at: token_created_at
-                                + Duration::seconds(token.refresh_token_expires_in),
+                            access_token: "".to_string(),
                             created_at: token_created_at,
                         },
                     )

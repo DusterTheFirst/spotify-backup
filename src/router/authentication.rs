@@ -11,7 +11,10 @@ use sea_orm::prelude::Uuid;
 use time::OffsetDateTime;
 
 use crate::{
-    database::{id::SpotifyUserId, Database},
+    database::{
+        id::{GithubUserId, SpotifyUserId},
+        Database,
+    },
     pages::InternalServerError,
 };
 
@@ -56,7 +59,7 @@ impl IncompleteUser {
                 account: CompleteAccount {
                     id: self.account.id,
                     spotify: SpotifyUserId::from_raw(std::mem::take(spotify)),
-                    github: (), // FIXME: TODO:
+                    github: GithubUserId::from_raw(std::mem::take(github)),
                     created_at: self.account.created_at,
                 },
             })
@@ -111,7 +114,7 @@ pub struct CompleteUser {
 pub struct CompleteAccount {
     pub id: Uuid,
     pub spotify: SpotifyUserId,
-    pub github: (), // GithubUserId
+    pub github: GithubUserId,
     pub created_at: OffsetDateTime,
 }
 

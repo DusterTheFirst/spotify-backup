@@ -166,7 +166,6 @@ impl Database {
                                     spotify_auth::Column::AccessToken,
                                     spotify_auth::Column::ExpiresAt,
                                     spotify_auth::Column::RefreshToken,
-                                    spotify_auth::Column::Scopes,
                                 ])
                                 .to_owned(),
                         )
@@ -224,12 +223,7 @@ impl Database {
                         .on_conflict(
                             OnConflict::column(github_auth::Column::UserId)
                                 // Do not update created_at
-                                .update_columns([
-                                    github_auth::Column::AccessToken,
-                                    github_auth::Column::ExpiresAt,
-                                    github_auth::Column::RefreshToken,
-                                    github_auth::Column::RefreshTokenExpiresAt,
-                                ])
+                                .update_columns([github_auth::Column::AccessToken])
                                 .to_owned(),
                         )
                         .exec_with_returning(transaction)

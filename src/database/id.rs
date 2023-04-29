@@ -2,6 +2,29 @@ use rspotify::prelude::Id;
 use sea_orm::prelude::Uuid;
 
 #[derive(Debug, Clone)]
+pub struct GithubUserId(u64);
+
+impl GithubUserId {
+    pub fn from_octocrab(user_id: octocrab::models::UserId) -> Self {
+        Self(user_id.0)
+    }
+
+    // TODO: do away with
+    pub fn from_raw(id: String) -> Self {
+        Self(id.parse().expect("github user id should be an integer"))
+    }
+
+    pub fn from_github_auth(model: entity::github_auth::Model) -> Self {
+        Self(
+            model
+                .user_id
+                .parse()
+                .expect("user id should be a non-integer"),
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct SpotifyUserId(String);
 
 impl SpotifyUserId {

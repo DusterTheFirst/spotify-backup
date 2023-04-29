@@ -61,6 +61,8 @@ impl IntoResponse for InternalServerError {
             .collect::<Vec<_>>();
 
         // FIXME: Send more info to sentry somehow
+        // FIXME: include context?? HOW?
+        // Look at implementation of color_eyre handler?
         tracing::error!(?chain, %self.caller, "encountered an error serving a page");
 
         self::error(

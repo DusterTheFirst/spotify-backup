@@ -3,9 +3,6 @@ edition = "2021"
 name    = "spotify-backup"
 version = "0.0.0-prerelease"
 
-# [profile.dev.package."*"]
-# opt-level = 2
-
 [profile.release]
 codegen-units   = 1
 debug           = 1
@@ -22,11 +19,9 @@ resolver = "2"
 
 [patch.crates-io]
 # https://github.com/DioxusLabs/dioxus/issues/979
-dioxus            = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
-dioxus-core       = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
-dioxus-core-macro = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
-dioxus-rsx        = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
-dioxus-ssr        = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
+dioxus      = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
+dioxus-core = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
+dioxus-ssr  = { git = "https://github.com/DioxusLabs/dioxus", rev = "c9f9b8b0fa71a8fabc6a216a8a7771a1f686d936" }
 
 [workspace.dependencies]
 sea-orm = { version = "0.11.2", default-features = false, features = ["debug-print", "macros", "postgres-array", "runtime-tokio-rustls", "sqlx-postgres", "with-time", "with-uuid"] }
@@ -46,7 +41,6 @@ lettre = { version = "0.10.4", default-features = false, features = ["builder", 
 
 # Github
 jsonwebtoken = "8.3.0"
-monostate    = "0.1.6"
 octocrab     = { version = "0.19.0", default-features = false, features = ["rustls", "stream"] }
 reqwest      = { version = "0.11.16", default-features = false, features = ["brotli", "deflate", "gzip", "rustls-tls"] }
 serde_json   = "1.0.96"

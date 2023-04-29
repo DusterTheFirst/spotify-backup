@@ -3,7 +3,10 @@ use axum::{
     response::Redirect,
 };
 use axum_extra::either::Either;
-use color_eyre::eyre::{eyre, Context};
+use color_eyre::{
+    eyre::{eyre, Context, ContextCompat},
+    Help, SectionExt,
+};
 use rspotify::{
     prelude::{Id, OAuthClient},
     scopes, AuthCodeSpotify,
@@ -40,7 +43,6 @@ pub fn from_rspotify(
         refresh_token: token
             .refresh_token
             .expect("rspotify token should contain refresh token"),
-        scopes: token.scopes.into_iter().collect(),
         user_id: user_id.id().to_string(),
         created_at: OffsetDateTime::now_utc(),
     }
@@ -53,11 +55,13 @@ pub async fn login(
     user_session: Option<UserSession>,
     query: Option<Query<SpotifyAuthCodeResponse>>,
 ) -> Result<Either<(UserSession, Redirect), Redirect>, InternalServerError> {
+    let required_scopes = scopes!("playlist-read-private", "user-library-read");
+
     let auth = AuthCodeSpotify::new(
         spotify.credentials.clone(),
         rspotify::OAuth {
             redirect_uri: spotify.redirect_uri.to_string(),
-            scopes: scopes!("playlist-read-private", "user-library-read"),
+            scopes: required_scopes.clone(),
             ..Default::default()
         },
     );
@@ -76,6 +80,22 @@ pub async fn login(
                     .await
                     .wrap_err("failed to request access token")?;
 
+                let token = auth
+                    .token
+                    .lock()
+                    .await
+                    .expect("spotify client token mutex should not be poisoned")
+                    .clone()
+                    .wrap_err("receiving the access token")?;
+
+                if token.scopes.is_superset(&required_scopes) {
+                    return Err(eyre!("spotify scopes did not match required scopes")
+                        // FIXME: replace with tracing spans?
+                        .with_section(|| format!("{:?}", required_scopes).header("Required Scopes"))
+                        .with_section(|| format!("{:?}", token.scopes).header("Accepted Scopes"))
+                        .into());
+                }
+
                 // FIXME: 403 when user is outside of allowlist
                 // https://developer.spotify.com/documentation/web-api/concepts/quota-modes
                 let user = auth
@@ -83,19 +103,10 @@ pub async fn login(
                     .await
                     .wrap_err("unable to get current user")?;
 
-                let token = auth
-                    .token
-                    .lock()
-                    .await
-                    .expect("spotify client token mutex should not be poisoned");
-
                 let new_session = database
                     .login_user_by_spotify(
                         user_session.map(|s| s.id),
-                        from_rspotify(
-                            token.clone().expect("spotify client token should exist"),
-                            user.id.clone(),
-                        ),
+                        from_rspotify(token, user.id.clone()),
                     )
                     .await
                     .wrap_err("failed to login to spotify account")?;
