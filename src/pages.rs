@@ -14,7 +14,7 @@ mod home;
 pub use {
     account::account,
     dashboard::dashboard,
-    error::{not_found, panic_error, InternalServerError, ClientError},
+    error::{not_found, panic_error, InternalServerError, ClientError, InstrumentErrorCustom},
     home::home,
 };
 

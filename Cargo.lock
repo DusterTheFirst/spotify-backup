@@ -2685,6 +2685,7 @@ dependencies = [
  "axum",
  "axum-extra",
  "color-eyre",
+ "color-spantrace",
  "const_format",
  "dioxus",
  "dioxus-ansi",

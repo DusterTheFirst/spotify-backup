@@ -3,20 +3,16 @@ use axum::{
     response::Redirect,
 };
 use axum_extra::either::Either;
-use color_eyre::{
-    eyre::{eyre, Context, ContextCompat},
-    Help, SectionExt,
-};
 use rspotify::{
     prelude::{Id, OAuthClient},
     scopes, AuthCodeSpotify,
 };
 use serde::Deserialize;
 use time::OffsetDateTime;
-use tracing::{debug, trace};
+use tracing::{debug, error_span, trace};
 
 use crate::{
-    pages::InternalServerError,
+    pages::{InstrumentErrorCustom, InternalServerError},
     router::{session::UserSession, AppState},
 };
 
@@ -71,14 +67,17 @@ pub async fn login(
             SpotifyAuthCodeResponse::Failure { error, state } => {
                 debug!(?error, "failed spotify oauth");
 
-                Err(eyre!("spotify authentication did not succeed: {error}").into())
+                Err(InternalServerError::new(error_span!(
+                    "spotify authentication did not succeed",
+                    error
+                )))
             }
             SpotifyAuthCodeResponse::Success { code, state } => {
                 trace!("succeeded spotify oauth");
 
                 auth.request_token(&code)
                     .await
-                    .wrap_err("failed to request access token")?;
+                    .instrument_error(error_span!("failed to request access token"))?;
 
                 let token = auth
                     .token
@@ -86,14 +85,16 @@ pub async fn login(
                     .await
                     .expect("spotify client token mutex should not be poisoned")
                     .clone()
-                    .wrap_err("receiving the access token")?;
+                    .ok_or(InternalServerError::new(error_span!(
+                        "taking access token from client"
+                    )))?;
 
-                if token.scopes.is_superset(&required_scopes) {
-                    return Err(eyre!("spotify scopes did not match required scopes")
-                        // FIXME: replace with tracing spans?
-                        .with_section(|| format!("{:?}", required_scopes).header("Required Scopes"))
-                        .with_section(|| format!("{:?}", token.scopes).header("Accepted Scopes"))
-                        .into());
+                if !token.scopes.is_superset(&required_scopes) {
+                    return Err(InternalServerError::new(error_span!(
+                        "spotify scopes did not match required scopes",
+                        ?required_scopes,
+                        ?token.scopes
+                    )));
                 }
 
                 // FIXME: 403 when user is outside of allowlist
@@ -101,15 +102,14 @@ pub async fn login(
                 let user = auth
                     .current_user()
                     .await
-                    .wrap_err("unable to get current user")?;
+                    .instrument_error(error_span!("getting current user"))?;
 
                 let new_session = database
                     .login_user_by_spotify(
                         user_session.map(|s| s.id),
                         from_rspotify(token, user.id.clone()),
                     )
-                    .await
-                    .wrap_err("failed to login to spotify account")?;
+                    .await?;
 
                 Ok(Either::E1((
                     UserSession { id: new_session },

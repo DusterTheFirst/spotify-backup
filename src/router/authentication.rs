@@ -6,16 +6,16 @@ use axum::{
     RequestPartsExt,
 };
 use axum_extra::either::Either3;
-use color_eyre::eyre::Context;
 use sea_orm::prelude::Uuid;
 use time::OffsetDateTime;
+use tracing::error_span;
 
 use crate::{
     database::{
         id::{GithubUserId, SpotifyUserId},
         Database,
     },
-    pages::InternalServerError,
+    pages::{InstrumentErrorCustom, InternalServerError},
 };
 
 use super::session::{UserSession, UserSessionRejection};
@@ -88,7 +88,7 @@ where
                 if let Some((session, account)) = database
                     .get_user_session(user_session.id)
                     .await
-                    .wrap_err("failed to get user session")
+                    .instrument_error(error_span!("failed to get user session"))
                     .map_err(|error| Either3::E2(error.into()))?
                 {
                     return Ok(IncompleteUser { session, account });

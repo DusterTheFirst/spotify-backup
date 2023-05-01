@@ -3,14 +3,10 @@ use axum::{
     response::Redirect,
 };
 use axum_extra::either::Either;
-use color_eyre::{
-    eyre::{eyre, Context},
-    Help, SectionExt,
-};
 use reqwest::header;
 use serde::Deserialize;
 use time::OffsetDateTime;
-use tracing::{debug, trace};
+use tracing::{debug, error_span, trace, Instrument};
 
 use crate::{
     pages::InternalServerError,
@@ -69,79 +65,104 @@ pub async fn login(
                     "failed github oauth"
                 );
 
-                Err(eyre!("github authentication did not succeed: {error} {error_description} {error_uri}").into())
+                Err(InternalServerError::new(error_span!(
+                    "github authentication failure",
+                    error,
+                    error_description,
+                    error_uri,
+                )))
             }
             GithubAuthCodeResponse::Success { code } => {
                 trace!("succeeded github oauth");
 
                 // FIXME: mess, use octocrab?
-                let response = reqwest
-                    .get("https://github.com/login/oauth/access_token")
-                    .query(&[
-                        ("client_id", github.client_id),
-                        ("client_secret", github.client_secret),
-                        ("redirect_uri", github.redirect_uri.to_string()),
-                        ("code", code),
-                    ])
-                    .header(header::ACCEPT, "application/json")
-                    .header("X-GitHub-Api-Version", "2022-11-28")
-                    .send()
-                    .await
-                    .wrap_err("exchanging authorization code (request)")?
-                    .error_for_status()
-                    .wrap_err("exchanging authorization code (status)")?;
+                let response = async {
+                    reqwest
+                        .get("https://github.com/login/oauth/access_token")
+                        .query(&[
+                            ("client_id", github.client_id),
+                            ("client_secret", github.client_secret),
+                            ("redirect_uri", github.redirect_uri.to_string()),
+                            ("code", code),
+                        ])
+                        .header(header::ACCEPT, "application/json")
+                        .header("X-GitHub-Api-Version", "2022-11-28")
+                        .send()
+                        .await?
+                        .error_for_status()
+                }
+                .instrument(error_span!("exchanging authorization code").or_current())
+                .await?;
 
                 dbg!(response.headers().get(header::CONTENT_TYPE));
 
                 // TODO: manual serde
                 let token_json = response
                     .text()
-                    .await
-                    .wrap_err("receiving github access_token response")?;
+                    .instrument(error_span!("receiving github access_token response"))
+                    .await?;
 
-                let oauth = serde_json::from_str::<
-                    UntaggedResult<GithubAccessToken, GithubAccessTokenError>,
-                >(&token_json)
-                .wrap_err("deserializing github access_token response")
-                .with_section(|| token_json.clone().header("JSON"))?
-                .0
-                .map_err(|error| {
-                    eyre!("Github API endpoint returned an error")
-                        .with_section(|| error.error.header("API Error"))
-                        .with_section(|| error.error_description.header("Error Description"))
-                        .with_section(|| error.error_uri.header("Error Uri"))
+                let oauth = error_span!(
+                    "deserializing github access_token response",
+                    json = token_json
+                )
+                .in_scope(|| {
+                    let deserialized_json: UntaggedResult<
+                        GithubAccessToken,
+                        GithubAccessTokenError,
+                    > = serde_json::from_str(&token_json)?;
+
+                    let oauth = deserialized_json.0.map_err(
+                        |GithubAccessTokenError {
+                             error,
+                             error_description,
+                             error_uri,
+                         }| {
+                            InternalServerError::new(error_span!(
+                                "github endpoint returned error",
+                                error,
+                                error_description,
+                                error_uri,
+                            ))
+                        },
+                    )?;
+
+                    if !oauth.scope.is_empty() {
+                        return Err(InternalServerError::new(error_span!(
+                            "github oauth scopes is not empty",
+                            oauth.scope,
+                        )));
+                    }
+                    if !oauth.token_type.eq_ignore_ascii_case("bearer") {
+                        return Err(InternalServerError::new(error_span!(
+                            "github oauth token type is not bearer",
+                            oauth.token_type,
+                        )));
+                    }
+
+                    Ok(oauth)
                 })?;
-
-                if oauth.scope.is_empty() {
-                    return Err(eyre!("github oauth scopes is not empty")
-                        // FIXME: replace with tracing spans?
-                        .with_section(|| token_json.clone().header("JSON"))
-                        .with_section(|| format!("{:?}", oauth.scope).header("scope"))
-                        .into());
-                }
-                if !oauth.token_type.eq_ignore_ascii_case("bearer") {
-                    return Err(eyre!("github oauth token type is not bearer")
-                        .with_section(|| token_json.clone().header("JSON"))
-                        .with_section(|| format!("{:?}", oauth.token_type).header("token_type"))
-                        .into());
-                }
 
                 let token_created_at = OffsetDateTime::now_utc();
 
-                let client = octocrab::OctocrabBuilder::new()
-                    .oauth(octocrab::auth::OAuth {
-                        access_token: oauth.access_token.into(),
-                        token_type: "bearer".into(),
-                        scope: vec![],
-                    })
-                    .build()
-                    .wrap_err("building octocrab client")?;
+                // TODO: macro or smthn for error_span, in_scope, in_current_span
+                let client = error_span!("building octocrab client").in_scope(|| {
+                    tracing_error::InstrumentResult::in_current_span(
+                        octocrab::OctocrabBuilder::new()
+                            .oauth(octocrab::auth::OAuth {
+                                access_token: oauth.access_token.into(),
+                                token_type: "bearer".into(),
+                                scope: vec![],
+                            })
+                            .build(),
+                    )
+                })?;
 
                 let user = client
                     .current()
                     .user()
-                    .await
-                    .wrap_err("getting current user")?;
+                    .instrument(error_span!("getting current user"))
+                    .await?;
 
                 dbg!(&user);
 
@@ -155,8 +176,11 @@ pub async fn login(
                             created_at: token_created_at,
                         },
                     )
-                    .await
-                    .wrap_err("logging in github account")?;
+                    .instrument(error_span!(
+                        "logging in github account",
+                        user.id = user.id.0
+                    ))
+                    .await?;
 
                 Ok(Either::E1((
                     UserSession { id: new_session },
@@ -165,14 +189,14 @@ pub async fn login(
             }
         }
     } else {
-        todo!(
-            "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}",
-            github.client_id,
-            github.redirect_uri
-        )
-        // Ok(Either::E2(Redirect::to(&format!(
+        // todo!(
         //     "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}",
-        //     github.client_id, github.redirect_uri
-        // ))))
+        //     github.client_id,
+        //     github.redirect_uri
+        // )
+        Ok(Either::E2(Redirect::to(&format!(
+            "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}",
+            github.client_id, github.redirect_uri
+        ))))
     }
 }

@@ -19,7 +19,7 @@ use tracing_error::SpanTrace;
 #[derive(Debug)]
 pub struct CaughtPanic {
     payload: Box<dyn Any + Send + 'static>,
-    info: PanicInfo,
+    pub info: PanicInfo,
 }
 
 impl CaughtPanic {
@@ -52,9 +52,9 @@ impl CaughtPanic {
 
 #[derive(Debug)]
 pub struct PanicInfo {
-    location: Option<Location>,
-    backtrace: Backtrace,
-    span_trace: SpanTrace,
+    pub location: Option<Location>,
+    pub backtrace: Backtrace,
+    pub span_trace: SpanTrace,
 }
 
 #[derive(Debug)]

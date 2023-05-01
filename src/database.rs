@@ -1,9 +1,5 @@
-use std::{
-    env,
-    fmt::{Debug, Display},
-};
+use std::{env, fmt::Debug};
 
-use color_eyre::{eyre::Context, Report};
 use entity::{account, github_auth, prelude::*, spotify_auth, user_session};
 use migration::{Migrator, MigratorTrait, OnConflict};
 use sea_orm::{
@@ -11,7 +7,10 @@ use sea_orm::{
     TransactionError, TransactionTrait,
 };
 use time::OffsetDateTime;
-use tracing::info;
+use tracing::{error_span, info, Instrument};
+use tracing_error::TracedError;
+
+use crate::pages::InstrumentErrorCustom;
 
 use self::id::UserSessionId;
 
@@ -51,17 +50,17 @@ impl Database {
     pub async fn logout_user_session(
         &self,
         session: crate::router::session::UserSession,
-    ) -> Result<crate::router::session::UserSession, Report> {
+    ) -> Result<crate::router::session::UserSession, TracedError<DbErr>> {
         let transaction = self
             .connection
-            .transaction::<_, _, DbErrReport>(|transaction| {
+            .transaction::<_, _, TracedError<DbErr>>(|transaction| {
                 Box::pin(logout_user_session(transaction, session.id))
             })
             .await;
 
         match transaction {
-            Err(TransactionError::Connection(error)) => Err(Report::new(error)),
-            Err(TransactionError::Transaction(error)) => Err(error.0),
+            Err(TransactionError::Connection(error)) => Err(TracedError::from(error)),
+            Err(TransactionError::Transaction(error)) => Err(error),
             Ok(()) => Ok(crate::router::session::UserSession::remove()),
         }
     }
@@ -89,23 +88,23 @@ async fn get_user_session(
 async fn logout_user_session(
     transaction: &DatabaseTransaction,
     session: UserSessionId,
-) -> Result<(), DbErrReport> {
+) -> Result<(), TracedError<DbErr>> {
     let user_session = get_user_session(transaction, session)
         .await
-        .wrap_err("getting current session")?;
+        .instrument_error(error_span!("getting current session"))?;
 
     if let Some((session, account)) = user_session {
         session
             .delete(transaction)
             .await
-            .wrap_err("deleting current session")?;
+            .instrument_error(error_span!("deleting current session"))?;
 
         // Delete an incomplete account if this session points to it and is the last session pointing to it
         let no_other_sessions = account
             .find_related(UserSession)
             .one(transaction)
             .await
-            .wrap_err("finding other sessions of account")?
+            .instrument_error(error_span!("finding other sessions of account"))?
             .is_none();
 
         // TODO: consolidate this with IncompleteUser???
@@ -113,37 +112,11 @@ async fn logout_user_session(
             account
                 .delete(transaction)
                 .await
-                .wrap_err("deleting current, incomplete account")?;
+                .instrument_error(error_span!("deleting current, incomplete account"))?;
         }
     }
 
     Ok(())
-}
-
-pub struct DbErrReport(Report);
-
-impl std::error::Error for DbErrReport {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.source()
-    }
-}
-
-impl Display for DbErrReport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl Debug for DbErrReport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.0, f)
-    }
-}
-
-impl From<Report> for DbErrReport {
-    fn from(value: Report) -> Self {
-        Self(value)
-    }
 }
 
 impl Database {
@@ -151,9 +124,9 @@ impl Database {
         &self,
         session: Option<UserSessionId>,
         spotify_auth: entity::spotify_auth::Model, // TODO: do not expose?
-    ) -> Result<UserSessionId, Report> {
+    ) -> Result<UserSessionId, TracedError<DbErr>> {
         self.connection
-            .transaction::<_, _, DbErrReport>(|transaction| {
+            .transaction::<_, _, TracedError<DbErr>>(|transaction| {
                 Box::pin(async move {
                     let spotify_id = spotify_auth.user_id.clone();
 
@@ -171,7 +144,9 @@ impl Database {
                         )
                         .exec_with_returning(transaction)
                         .await
-                        .wrap_err("updating saved spotify authentication details")?;
+                        .instrument_error(error_span!(
+                            "updating saved spotify authentication details"
+                        ))?;
 
                     let account = get_create_or_update_account(
                         transaction,
@@ -181,8 +156,7 @@ impl Database {
                         },
                         session,
                     )
-                    .await
-                    .wrap_err("updating account")?;
+                    .await?;
 
                     // TODO: session pruning periodically
                     let new_session = UserSession::insert(
@@ -196,15 +170,15 @@ impl Database {
                     )
                     .exec_with_returning(transaction)
                     .await
-                    .wrap_err("creating new user session")?;
+                    .instrument_error(error_span!("creating new user session"))?;
 
                     Ok(UserSessionId::from_user_session(new_session))
                 })
             })
             .await
             .map_err(|error| match error {
-                TransactionError::Connection(error) => Report::new(error),
-                TransactionError::Transaction(error) => error.0,
+                TransactionError::Connection(error) => TracedError::from(error),
+                TransactionError::Transaction(error) => error,
             })
     }
 
@@ -212,9 +186,9 @@ impl Database {
         &self,
         session: Option<UserSessionId>,
         github_auth: entity::github_auth::Model, // TODO: do not expose?
-    ) -> Result<UserSessionId, Report> {
+    ) -> Result<UserSessionId, TracedError<DbErr>> {
         self.connection
-            .transaction::<_, _, DbErrReport>(|transaction| {
+            .transaction::<_, _, TracedError<DbErr>>(|transaction| {
                 Box::pin(async move {
                     let user_id = github_auth.user_id.clone();
 
@@ -228,7 +202,9 @@ impl Database {
                         )
                         .exec_with_returning(transaction)
                         .await
-                        .wrap_err("updating saved github authentication details")?;
+                        .instrument_error(error_span!(
+                            "updating saved github authentication details"
+                        ))?;
 
                     let account = get_create_or_update_account(
                         transaction,
@@ -238,8 +214,8 @@ impl Database {
                         },
                         session,
                     )
-                    .await
-                    .wrap_err("updating account")?;
+                    .instrument(error_span!("updating account"))
+                    .await?;
 
                     // TODO: session pruning periodically
                     let new_session = UserSession::insert(
@@ -253,15 +229,15 @@ impl Database {
                     )
                     .exec_with_returning(transaction)
                     .await
-                    .wrap_err("creating new user session")?;
+                    .instrument_error(error_span!("creating new user session"))?;
 
                     Ok(UserSessionId::from_user_session(new_session))
                 })
             })
             .await
             .map_err(|error| match error {
-                TransactionError::Connection(error) => Report::new(error),
-                TransactionError::Transaction(error) => error.0,
+                TransactionError::Connection(error) => TracedError::from(error),
+                TransactionError::Transaction(error) => error,
             })
     }
 }
@@ -269,11 +245,12 @@ impl Database {
 /// This function will invalidate any session given to it, you must recreate a session after running this
 // TODO: reduce database calls?
 // FIXME: use type system to ensure account only deleted when wanted to be deleted (ie, session deletion account deletion propagation)
+#[tracing::instrument(skip_all)]
 pub async fn get_create_or_update_account(
     transaction: &DatabaseTransaction,
     model: account::ActiveModel,
     session: Option<UserSessionId>,
-) -> Result<account::Model, DbErrReport> {
+) -> Result<account::Model, TracedError<DbErr>> {
     let spotify_filter = match &model.spotify {
         ActiveValue::Set(Some(spotify)) | ActiveValue::Unchanged(Some(spotify)) => Some(spotify),
         _ => None,
@@ -295,7 +272,9 @@ pub async fn get_create_or_update_account(
         })
         .one(transaction)
         .await
-        .wrap_err("finding user already associated with this spotify account")?;
+        .instrument_error(error_span!(
+            "finding user already associated with this spotify account"
+        ))?;
 
     // If an account already exists with this
     if let Some(account) = account {
@@ -304,7 +283,7 @@ pub async fn get_create_or_update_account(
             let session = UserSession::find_by_id(session_id.into_uuid())
                 .one(transaction)
                 .await
-                .wrap_err("getting current session")?;
+                .instrument_error(error_span!("getting current session"))?;
 
             match session {
                 Some(session) if account.id == session.account => {
@@ -312,13 +291,13 @@ pub async fn get_create_or_update_account(
                     session
                         .delete(transaction)
                         .await
-                        .wrap_err("deleting current session")?;
+                        .instrument_error(error_span!("deleting current session"))?;
                 }
                 _ => {
                     // Invalidate the current session removing any incomplete accounts
                     logout_user_session(transaction, session_id)
-                        .await
-                        .wrap_err("deleting old user session")?;
+                        .instrument(error_span!("deleting old user session"))
+                        .await?;
                 }
             }
         }
@@ -330,14 +309,14 @@ pub async fn get_create_or_update_account(
     if let Some(session) = session {
         let session = get_user_session(transaction, session)
             .await
-            .wrap_err("getting current session")?;
+            .instrument_error(error_span!("getting current session"))?;
 
         if let Some((session, account)) = session {
             // Invalidate the current session, but keep the account around
             session
                 .delete(transaction)
                 .await
-                .wrap_err("deleting current session")?;
+                .instrument_error(error_span!("deleting current session"))?;
 
             // If no account has this spotify user already, add it to the current account
             let account = Account::update(account::ActiveModel {
@@ -346,7 +325,7 @@ pub async fn get_create_or_update_account(
             })
             .exec(transaction)
             .await
-            .wrap_err("updating existing account")?;
+            .instrument_error(error_span!("updating existing account"))?;
 
             return Ok(account);
         }
@@ -360,7 +339,7 @@ pub async fn get_create_or_update_account(
     })
     .exec_with_returning(transaction)
     .await
-    .wrap_err("creating new account")?;
+    .instrument_error(error_span!("creating new account"))?;
 
     Ok(account)
 }
