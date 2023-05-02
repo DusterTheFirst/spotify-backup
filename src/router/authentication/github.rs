@@ -94,8 +94,6 @@ pub async fn login(
                 .instrument(error_span!("exchanging authorization code").or_current())
                 .await?;
 
-                dbg!(response.headers().get(header::CONTENT_TYPE));
-
                 // TODO: manual serde
                 let token_json = response
                     .text()
@@ -163,8 +161,6 @@ pub async fn login(
                     .user()
                     .instrument(error_span!("getting current user"))
                     .await?;
-
-                dbg!(&user);
 
                 let new_session = database
                     .login_user_by_github(
