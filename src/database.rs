@@ -32,7 +32,7 @@ impl Database {
         let mut options = ConnectOptions::new(url);
         options
             .sqlx_logging(true)
-            .sqlx_logging_level(tracing::log::LevelFilter::Info);
+            .sqlx_logging_level(tracing::log::LevelFilter::Trace);
 
         let connection: DatabaseConnection = sea_orm::Database::connect(options).await?;
         info!("migrating database");
