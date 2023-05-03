@@ -76,7 +76,8 @@ pub async fn router(
             "/static",
             ServeDir::new(http.static_dir)
                 .append_index_html_on_directories(false)
-                .call_fallback_on_method_not_allowed(true),
+                .call_fallback_on_method_not_allowed(true)
+                .fallback(get(error::not_found)),
         )
         .fallback(error::not_found)
         .layer(

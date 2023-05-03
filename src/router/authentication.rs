@@ -8,15 +8,8 @@ use axum::{
 use axum_extra::either::Either3;
 use sea_orm::prelude::Uuid;
 use time::OffsetDateTime;
-use tracing::error_span;
 
-use crate::{
-    database::{
-        id::{GithubUserId, SpotifyUserId},
-        Database,
-    },
-    pages::{InstrumentErrorCustom, InternalServerError},
-};
+use crate::{database::Database, pages::InternalServerError};
 
 use super::session::{UserSession, UserSessionRejection};
 
@@ -28,7 +21,7 @@ pub async fn logout(
     session: Option<UserSession>,
 ) -> Result<Response, InternalServerError> {
     if let Some(session) = session {
-        let session = database.logout_user_session(session).await?;
+        let session = database.logout_current_user(session).await?;
 
         Ok((session, Redirect::to("/")).into_response())
     } else {
@@ -39,7 +32,29 @@ pub async fn logout(
 #[derive(Debug)]
 pub struct IncompleteUser {
     pub session: entity::user_session::Model,
-    pub account: entity::account::Model,
+    pub account: IncompleteAccount,
+}
+
+#[derive(Debug)]
+pub struct IncompleteAccount {
+    pub id: Uuid,
+    pub created_at: OffsetDateTime,
+
+    #[doc(hidden)]
+    pub github: Option<entity::github_auth::Model>,
+    #[doc(hidden)]
+    pub spotify: Option<entity::spotify_auth::Model>,
+}
+
+impl IncompleteAccount {
+    pub async fn spotify_user(&self) -> Option<rspotify::model::PrivateUser> {
+        // rspotify::AuthCodePkceSpotify::new(creds, oauth) FIXME: make one way to create a client, also global state to store client creds?
+        todo!()
+    }
+
+    pub async fn github_user(&self) -> Option<octocrab::models::User> {
+        todo!()
+    }
 }
 
 impl IncompleteUser {
@@ -48,23 +63,27 @@ impl IncompleteUser {
     }
 
     #[allow(clippy::result_large_err)]
-    pub fn into_complete(mut self) -> Result<CompleteUser, IncompleteUser> {
-        // Do not move out of self until we are sure we are converting to a complete user
-        let github = self.account.github.as_mut();
-        let spotify = self.account.spotify.as_mut();
-
-        if let Some((github, spotify)) = github.zip(spotify) {
-            Ok(CompleteUser {
+    pub fn into_complete(self) -> Result<CompleteUser, IncompleteUser> {
+        match (self.account.github, self.account.spotify) {
+            (Some(github), Some(spotify)) => Ok(CompleteUser {
                 session: self.session,
                 account: CompleteAccount {
                     id: self.account.id,
-                    spotify: SpotifyUserId::from_raw(std::mem::take(spotify)),
-                    github: GithubUserId::from_raw(std::mem::take(github)),
                     created_at: self.account.created_at,
+
+                    spotify,
+                    github,
                 },
-            })
-        } else {
-            Err(self)
+            }),
+
+            (github, spotify) => Err(IncompleteUser {
+                session: self.session,
+                account: IncompleteAccount {
+                    github,
+                    spotify,
+                    ..self.account
+                },
+            }),
         }
     }
 }
@@ -85,13 +104,13 @@ where
 
         match parts.extract::<UserSession>().await {
             Ok(user_session) => {
-                if let Some((session, account)) = database
-                    .get_user_session(user_session.id)
+                let incomplete_user = database
+                    .get_current_user(user_session.id)
                     .await
-                    .instrument_error(error_span!("failed to get user session"))
-                    .map_err(|error| Either3::E2(error.into()))?
-                {
-                    return Ok(IncompleteUser { session, account });
+                    .map_err(Either3::E2)?;
+
+                if let Some(incomplete_user) = incomplete_user {
+                    return Ok(incomplete_user);
                 }
             }
             Err(UserSessionRejection::NoSessionCookie) => {}
@@ -113,9 +132,10 @@ pub struct CompleteUser {
 #[derive(Debug)]
 pub struct CompleteAccount {
     pub id: Uuid,
-    pub spotify: SpotifyUserId,
-    pub github: GithubUserId,
     pub created_at: OffsetDateTime,
+
+    github: entity::github_auth::Model,
+    spotify: entity::spotify_auth::Model,
 }
 
 #[async_trait]

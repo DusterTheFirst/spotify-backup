@@ -12,7 +12,8 @@ use time::OffsetDateTime;
 use tracing::{debug, error_span, trace};
 
 use crate::{
-    pages::{InstrumentErrorCustom, InternalServerError},
+    internal_server_error,
+    pages::InternalServerError,
     router::{session::UserSession, AppState},
 };
 
@@ -67,17 +68,19 @@ pub async fn login(
             SpotifyAuthCodeResponse::Failure { error, state } => {
                 debug!(?error, "failed spotify oauth");
 
-                Err(InternalServerError::new(error_span!(
+                Err(internal_server_error!(
                     "spotify authentication did not succeed",
                     error
-                )))
+                ))
             }
             SpotifyAuthCodeResponse::Success { code, state } => {
                 trace!("succeeded spotify oauth");
 
-                auth.request_token(&code)
-                    .await
-                    .instrument_error(error_span!("failed to request access token"))?;
+                InternalServerError::wrap(
+                    auth.request_token(&code),
+                    error_span!("requesting access token"),
+                )
+                .await?;
 
                 let token = auth
                     .token
@@ -85,24 +88,23 @@ pub async fn login(
                     .await
                     .expect("spotify client token mutex should not be poisoned")
                     .clone()
-                    .ok_or(InternalServerError::new(error_span!(
-                        "taking access token from client"
-                    )))?;
+                    .expect("spotify client token should exist");
 
                 if !token.scopes.is_superset(&required_scopes) {
-                    return Err(InternalServerError::new(error_span!(
+                    return Err(internal_server_error!(
                         "spotify scopes did not match required scopes",
                         ?required_scopes,
                         ?token.scopes
-                    )));
+                    ));
                 }
 
                 // FIXME: 403 when user is outside of allowlist
                 // https://developer.spotify.com/documentation/web-api/concepts/quota-modes
-                let user = auth
-                    .current_user()
-                    .await
-                    .instrument_error(error_span!("getting current user"))?;
+                let user = InternalServerError::wrap(
+                    auth.current_user(),
+                    error_span!("getting current user"),
+                )
+                .await?;
 
                 let new_session = database
                     .login_user_by_spotify(
@@ -119,7 +121,7 @@ pub async fn login(
         }
     } else {
         let auth_url = auth
-            .get_authorize_url(true)
+            .get_authorize_url(false)
             .expect("authorization url should be valid");
 
         Ok(Either::E2(Redirect::to(&auth_url)))

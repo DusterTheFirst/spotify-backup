@@ -14,7 +14,7 @@ mod home;
 pub use {
     account::account,
     dashboard::dashboard,
-    error::{not_found, panic_error, ClientError, InstrumentErrorCustom, InternalServerError},
+    error::{not_found, panic_error, ClientError, InternalServerError},
     home::home,
 };
 
@@ -61,6 +61,19 @@ impl<'e> Page<'e> {
                 title { self.title, " - Spotify Backup" }
             }
             body {
+                header {
+                    nav {
+                        a { href: "/",
+                            "Spotify Backup"
+                        }
+                        a { href: "/account",
+                            "Account"
+                        }
+                        a { href: "/dashboard",
+                            "Dashboard"
+                        }
+                    }
+                }
                 self.content
                 footer {
                     SERVER_INFO.name

@@ -1,16 +1,13 @@
-use std::{
-    backtrace::{Backtrace, BacktraceStatus},
-    fmt::{Debug, Display},
-    panic::Location,
-};
+use std::{backtrace::Backtrace, fmt::Display, panic::Location};
 
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 use dioxus::prelude::*;
-use tracing::{field::ValueSet, Span};
-use tracing_error::{InstrumentResult, SpanTrace};
+use futures::Future;
+use tracing::{Instrument, Span};
+use tracing_error::SpanTrace;
 
 use crate::router::middleware::catch_panic::CaughtPanic;
 
@@ -52,28 +49,137 @@ impl IntoResponse for ClientError {
     }
 }
 
+#[macro_export]
+macro_rules! internal_server_error {
+    ($name:expr, $($field:tt)+) => {
+        InternalServerError::throw(
+            tracing::error_span!($name, $($field)*),
+            &|| tracing::error!({ $($field)+ }, $name)
+        )
+    };
+    ($name:expr) => {
+        InternalServerError::throw(
+            tracing::error_span!($name),
+            &|| tracing::error!($name)
+        )
+    };
+}
+
+#[derive(Debug)]
+pub struct FormatError(String);
+
+impl Display for FormatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
+impl std::error::Error for FormatError {}
+
+#[derive(Debug)]
 pub struct InternalServerError {
-    inner_error: Option<Box<dyn std::error::Error>>,
+    inner_error: Option<Box<dyn std::error::Error + Send + Sync + 'static>>,
     span_trace: SpanTrace,
     backtrace: Backtrace,
     caller: &'static Location<'static>,
 }
 
 impl InternalServerError {
+    #[inline]
     #[track_caller]
-    pub fn new(error_span: tracing::span::Span) -> Self {
+    #[doc = "hidden"]
+    pub fn throw(span: Span, error: &dyn Fn()) -> Self {
+        let caller = Location::caller();
+
+        // "throw" error
+        (error)();
+        // // FIXME: Send more info to sentry somehow
+        // // FIXME: include context?? HOW?
+        // tracing::error!(location=%caller, "{error}");
+
+        Self {
+            inner_error: None,
+            span_trace: SpanTrace::new(span),
+            backtrace: Backtrace::capture(),
+            caller,
+        }
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn wrap<F, T, E>(
+        future: F,
+        span: Span,
+    ) -> impl Future<Output = Result<T, InternalServerError>>
+    where
+        F: Future<Output = Result<T, E>>,
+        E: std::error::Error + Send + Sync + 'static,
+    {
         let caller = Location::caller();
         let backtrace = Backtrace::capture();
 
-        error_span.in_scope(|| {
-            Self {
-                inner_error: None,
-                span_trace: SpanTrace::capture(),
-                backtrace,
-                caller,
+        async move {
+            match Instrument::instrument(future, span.clone()).await {
+                Ok(data) => Ok(data),
+                Err(error) => Err({
+                    let _span = span.enter();
+                    InternalServerError::from_error_inner(error, caller, backtrace)
+                }),
             }
-            .throw()
-        })
+        }
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn wrap_in_current_span<F, T, E>(
+        future: F,
+    ) -> impl Future<Output = Result<T, InternalServerError>>
+    where
+        F: Future<Output = Result<T, E>>,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let caller = Location::caller();
+        let backtrace = Backtrace::capture();
+
+        async move {
+            let result = Instrument::in_current_span(future).await;
+
+            match result {
+                Ok(data) => Ok(data),
+                Err(error) => Err(InternalServerError::from_error_inner(
+                    error, caller, backtrace,
+                )),
+            }
+        }
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn from_error<E>(error: E) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self::from_error_inner(error, Location::caller(), Backtrace::capture())
+    }
+
+    #[inline]
+    fn from_error_inner<E>(
+        error: E,
+        caller: &'static Location<'static>,
+        backtrace: Backtrace,
+    ) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        // FIXME: Send more info to sentry somehow
+        // FIXME: include context?? HOW?
+        tracing::error!(location=%caller, "{error}");
+
+        InternalServerError {
+            inner_error: Some(Box::new(error)),
+            span_trace: SpanTrace::capture(),
+            backtrace,
+            caller,
+        }
     }
 
     fn inner_error(&self) -> String {
@@ -82,64 +188,17 @@ impl InternalServerError {
             None => String::from("None"),
         }
     }
-
-    #[inline(always)]
-    fn throw(self) -> Self {
-        // FIXME: Send more info to sentry somehow
-        // FIXME: include context?? HOW?
-        // Look at implementation of color_eyre handler?
-        tracing::error!(caller=%self.caller, error=%self.inner_error(), "encountered an error serving a page");
-
-        self
-    }
 }
 
-pub struct FormatError(String);
-
-impl Debug for FormatError {
+impl Display for InternalServerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Debug::fmt(&self.0, f)
+        writeln!(f, "INTERNAL SERVER ERROR")?;
+        writeln!(f, "{}", self.inner_error())?;
+        writeln!(f, "Location: {}", self.caller)?;
+        writeln!(f, "{}", self.span_trace)
     }
 }
-impl Display for FormatError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-impl std::error::Error for FormatError {}
-
-impl<E> From<E> for InternalServerError
-where
-    E: std::error::Error + 'static,
-{
-    #[track_caller]
-    fn from(value: E) -> Self {
-        Self {
-            inner_error: Some(Box::new(value)),
-            span_trace: SpanTrace::capture(),
-            backtrace: Backtrace::capture(),
-            caller: Location::caller(),
-        }
-        .throw()
-    }
-}
-
-pub trait InstrumentErrorCustom<T> {
-    type Instrumented;
-
-    fn instrument_error(self, span: Span) -> Result<T, Self::Instrumented>;
-}
-
-impl<T, R> InstrumentErrorCustom<T> for R
-where
-    R: InstrumentResult<T>,
-{
-    type Instrumented = R::Instrumented;
-
-    fn instrument_error(self, span: Span) -> Result<T, Self::Instrumented> {
-        span.in_scope(|| InstrumentResult::<T>::in_current_span(self))
-    }
-}
+impl std::error::Error for InternalServerError {}
 
 impl IntoResponse for InternalServerError {
     fn into_response(self) -> Response {
@@ -160,36 +219,13 @@ impl IntoResponse for InternalServerError {
                     }
 
                     h3 { "Backtrace" }
-                    backtrace(self.backtrace)
+                    pre { code { "{self.backtrace}" } }
                 }
             } else {
                 rsx! {""}
             },
         )
         .into_response()
-    }
-}
-
-pub fn backtrace<'a>(backtrace: Backtrace) -> LazyNodes<'a, 'a> {
-    rsx! {
-        pre {
-            code {
-                match backtrace.status() {
-                    BacktraceStatus::Captured => rsx!{
-                        "{backtrace}"
-                    },
-                    BacktraceStatus::Unsupported => rsx! {
-                        "capturing backtraces is unsupported"
-                    },
-                    BacktraceStatus::Disabled => rsx! {
-                        "capturing of backtraces is disabled, enable with RUST_BACKTRACE=1"
-                    },
-                    _ => rsx! {
-                        "backtrace is in an unknown state: {backtrace.status():?}"
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -219,8 +255,7 @@ pub fn panic_error(panic_info: CaughtPanic) -> Response {
                 }
 
                 h2 { "Backtrace" }
-                // FIXME: cringe clone
-                backtrace(panic_info.info.backtrace)
+                pre { code { "{panic_info.info.backtrace}" } }
             }
         } else {
             rsx! {""}

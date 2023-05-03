@@ -1,7 +1,7 @@
 use rspotify::prelude::Id;
 use sea_orm::prelude::Uuid;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct GithubUserId(u64);
 
 impl GithubUserId {
@@ -24,7 +24,7 @@ impl GithubUserId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SpotifyUserId(String);
 
 impl SpotifyUserId {

@@ -1,9 +1,7 @@
 use std::fmt::Display;
 
 use axum::{
-    body::Body,
     extract::OriginalUri,
-    http::Request,
     response::{IntoResponse, Response},
 };
 use tracing::error;
@@ -14,16 +12,6 @@ use super::middleware::catch_panic::CaughtPanic;
 
 pub async fn not_found(OriginalUri(uri): OriginalUri) -> Response {
     pages::not_found(uri.path())
-}
-
-pub async fn static_not_found(req: Request<Body>) -> Response {
-    pages::not_found(
-        req.extensions()
-            .get::<OriginalUri>()
-            .expect("OriginalUri extractor should exist on router")
-            .0
-            .path(),
-    )
 }
 
 pub fn internal_server_error_panic(info: CaughtPanic) -> Response {

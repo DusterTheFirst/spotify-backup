@@ -1,13 +1,17 @@
 use axum::response::{IntoResponse, Response};
 use dioxus::prelude::*;
+use futures::join;
+use rspotify::prelude::Id;
 
 use crate::router::authentication::IncompleteUser;
 
 use super::Page;
 
 pub async fn account(current_user: IncompleteUser) -> Response {
-    let spotify_login = current_user.account.spotify.as_ref();
-    let github_login = current_user.account.github.as_ref();
+    let (spotify_user, github_user) = join!(
+        current_user.account.spotify_user(),
+        current_user.account.github_user()
+    );
     let user_complete = current_user.is_complete();
 
     Page {
@@ -25,10 +29,22 @@ pub async fn account(current_user: IncompleteUser) -> Response {
             }
 
             menu {
+                if user_complete {
+                    rsx! {
+                        li {
+                            a { href: "/dashboard",
+                                "dashboard"
+                            }
+                        }
+                        hr {}
+                    }
+                }
                 li {
-                    if let Some(login) = spotify_login {
+                    if let Some(user) = spotify_user {
+                        let spotify_name = user.display_name.unwrap_or_else(|| user.id.id().to_string());
+
                         rsx! {
-                            "spotify already authenticated as {login}"
+                            "spotify already authenticated as {spotify_name}"
                             a { href: "/login/spotify",
                                 "change spotify account"
                             }
@@ -42,9 +58,11 @@ pub async fn account(current_user: IncompleteUser) -> Response {
                     }
                 }
                 li {
-                    if let Some(login) = github_login {
+                    if let Some(user) = github_user {
+                        let github_name = user.login;
+
                         rsx! {
-                            "github already authenticated as {login}"
+                            "github already authenticated as {github_name}"
                             a { href: "/login/github",
                                 "change github account"
                             }
@@ -60,6 +78,11 @@ pub async fn account(current_user: IncompleteUser) -> Response {
                 li {
                     a { href: "/logout",
                         "log out"
+                    }
+                }
+                li {
+                    a { href: "/logout/delete",
+                        "delete account"
                     }
                 }
             }
