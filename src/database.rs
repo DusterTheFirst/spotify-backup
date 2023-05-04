@@ -2,6 +2,7 @@ use std::{env, fmt::Debug};
 
 use entity::{account, github_auth, prelude::*, spotify_auth, user_session};
 use migration::{Migrator, MigratorTrait, OnConflict};
+use rspotify::prelude::Id;
 use sea_orm::{
     prelude::*, ActiveValue, ConnectOptions, DatabaseTransaction, IntoActiveModel, QueryTrait,
     TransactionError, TransactionTrait,
@@ -12,7 +13,10 @@ use tracing::{error_span, info, Instrument};
 use crate::{
     internal_server_error,
     pages::InternalServerError,
-    router::authentication::{IncompleteAccount, IncompleteUser},
+    router::authentication::{
+        github::GithubAuthentication, spotify::SpotifyAuthentication, IncompleteAccount,
+        IncompleteUser,
+    },
 };
 
 use self::id::UserSessionId;
@@ -71,8 +75,8 @@ impl Database {
                     id: account.id,
                     created_at: account.created_at,
 
-                    github,
-                    spotify,
+                    github: github.map(GithubAuthentication::from_model),
+                    spotify: spotify.map(SpotifyAuthentication::from_model),
                 },
             }));
         }
@@ -158,20 +162,21 @@ async fn logout_user_session(
 }
 
 impl Database {
-    #[tracing::instrument(skip(self, spotify_auth), fields(spotify = spotify_auth.user_id))]
+    #[tracing::instrument(skip(self, spotify_auth), fields(spotify = spotify_auth.user_id.id()))]
     pub async fn login_user_by_spotify(
         &self,
         session: Option<UserSessionId>,
-        spotify_auth: entity::spotify_auth::Model, // TODO: do not expose?
+        spotify_auth: SpotifyAuthentication,
     ) -> Result<UserSessionId, InternalServerError> {
         self.connection
             .transaction(|transaction| {
                 Box::pin(async move {
-                    let spotify_id = spotify_auth.user_id.clone();
+                    let model = spotify_auth.into_model();
+                    let spotify_id = model.user_id.clone();
 
                     // Update the saved spotify authentication details for this user
                     InternalServerError::wrap(
-                        SpotifyAuth::insert(spotify_auth.into_active_model())
+                        SpotifyAuth::insert(model.into_active_model())
                             .on_conflict(
                                 OnConflict::column(spotify_auth::Column::UserId)
                                     // Do not update created_at
@@ -223,20 +228,21 @@ impl Database {
             })
     }
 
-    #[tracing::instrument(skip(self, github_auth), fields(github = github_auth.user_id))]
+    #[tracing::instrument(skip(self, github_auth), fields(github = github_auth.user_id.0))]
     pub async fn login_user_by_github(
         &self,
         session: Option<UserSessionId>,
-        github_auth: entity::github_auth::Model, // TODO: do not expose?
+        github_auth: GithubAuthentication,
     ) -> Result<UserSessionId, InternalServerError> {
         self.connection
             .transaction(|transaction| {
                 Box::pin(async move {
-                    let user_id = github_auth.user_id.clone();
+                    let model = github_auth.into_model();
+                    let user_id = model.user_id.clone();
 
                     // Update the saved spotify authentication details for this user
                     InternalServerError::wrap(
-                        GithubAuth::insert(github_auth.into_active_model())
+                        GithubAuth::insert(model.into_active_model())
                             .on_conflict(
                                 OnConflict::column(github_auth::Column::UserId)
                                     // Do not update created_at

@@ -11,10 +11,9 @@ use tracing::debug;
 use middleware::{catch_panic::catch_panic_layer, trace::SpanMaker};
 
 use crate::{
-    database::Database, pages, router::middleware::server_information::StaticServerInformation,
+    database::Database, environment::HTTP_ENVIRONMENT, pages,
+    router::middleware::server_information::StaticServerInformation,
 };
-
-use super::{GithubEnvironment, HttpEnvironment, SpotifyEnvironment};
 
 pub mod authentication;
 pub mod error;
@@ -26,27 +25,18 @@ pub async fn favicon() -> Redirect {
 }
 
 #[derive(FromRef, Clone)]
-// TODO: make cheaper to clone
 pub struct AppState {
     pub database: Database,
-    pub spotify: SpotifyEnvironment,
-    pub github: GithubEnvironment,
     pub reqwest: reqwest::Client,
 }
 
-pub async fn router(
-    http: HttpEnvironment,
-    spotify: SpotifyEnvironment,
-    github: GithubEnvironment,
-) -> color_eyre::Result<()> {
+pub async fn router() -> color_eyre::Result<()> {
     let database = Database::connect()
         .await
         .wrap_err("failed to setup to database")?;
 
     let state = AppState {
         database,
-        spotify,
-        github,
         reqwest: reqwest::Client::builder()
             .brotli(true)
             .gzip(true)
@@ -74,7 +64,7 @@ pub async fn router(
         .route("/health", get(|| async { "OK" }))
         .nest_service(
             "/static",
-            ServeDir::new(http.static_dir)
+            ServeDir::new(&HTTP_ENVIRONMENT.static_dir)
                 .append_index_html_on_directories(false)
                 .call_fallback_on_method_not_allowed(true)
                 .fallback(get(error::not_found)),
@@ -104,7 +94,7 @@ pub async fn router(
                         .allow_credentials(false)
                         .allow_headers([])
                         .allow_methods([])
-                        .allow_origin([http
+                        .allow_origin([HTTP_ENVIRONMENT
                             .domain
                             .as_str()
                             .parse()
@@ -112,7 +102,7 @@ pub async fn router(
                 )
                 // Redirect requests that are not to the configured domain
                 .layer(axum::middleware::from_fn_with_state(
-                    http.domain,
+                    HTTP_ENVIRONMENT.domain.clone(),
                     middleware::redirect::redirect_to_domain,
                 ))
                 // Set server information response headers
@@ -124,8 +114,8 @@ pub async fn router(
         )
         .with_state(state);
 
-    debug!(?http.bind, "started http server");
-    axum::Server::bind(&http.bind)
+    debug!(bind = ?HTTP_ENVIRONMENT.bind, "started http server");
+    axum::Server::bind(&HTTP_ENVIRONMENT.bind)
         .serve(app.into_make_service())
         .await
         .wrap_err("failed to bind to given address")

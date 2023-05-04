@@ -3,16 +3,18 @@ use axum::{
     response::Redirect,
 };
 use axum_extra::either::Either;
+use octocrab::models::UserId;
 use reqwest::header;
+use secrecy::{ExposeSecret, Secret, SecretString};
 use serde::Deserialize;
 use time::OffsetDateTime;
 use tracing::{debug, error_span, trace, Instrument};
 
 use crate::{
+    environment::GITHUB_ENVIRONMENT,
     internal_server_error,
     pages::InternalServerError,
     router::{session::UserSession, AppState},
-    util::UntaggedResult,
 };
 
 #[derive(Debug, Deserialize)]
@@ -29,26 +31,22 @@ pub enum GithubAuthCodeResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct GithubAccessToken {
-    access_token: String,
-    scope: String,
-    token_type: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct GithubAccessTokenError {
-    error: String,
-    error_description: String,
-    error_uri: String,
+#[serde(untagged, deny_unknown_fields)]
+enum GithubAccessTokenResponse {
+    Success {
+        access_token: String,
+        scope: String,
+        token_type: String,
+    },
+    Failure {
+        error: String,
+        error_description: String,
+        error_uri: String,
+    },
 }
 
 pub async fn login(
-    State(AppState {
-        github,
-        database,
-        reqwest,
-        ..
-    }): State<AppState>,
+    State(AppState { database, reqwest }): State<AppState>,
     user_session: Option<UserSession>,
     query: Option<Query<GithubAuthCodeResponse>>,
 ) -> Result<Either<(UserSession, Redirect), Redirect>, InternalServerError> {
@@ -82,9 +80,9 @@ pub async fn login(
                         reqwest
                             .get("https://github.com/login/oauth/access_token")
                             .query(&[
-                                ("client_id", github.client_id),
-                                ("client_secret", github.client_secret),
-                                ("redirect_uri", github.redirect_uri.to_string()),
+                                ("client_id", GITHUB_ENVIRONMENT.client_id.clone()),
+                                ("client_secret", GITHUB_ENVIRONMENT.client_secret.clone()),
+                                ("redirect_uri", GITHUB_ENVIRONMENT.redirect_uri.to_string()),
                                 ("code", code),
                             ])
                             .header(header::ACCEPT, "application/json")
@@ -97,89 +95,61 @@ pub async fn login(
                 )
                 .await?;
 
-                // TODO: manual serde
                 let token_json = InternalServerError::wrap(
                     response.text(),
                     error_span!("receiving github access_token response"),
                 )
                 .await?;
 
-                let oauth = error_span!(
+                let access_token = error_span!(
                     "deserializing github access_token response",
                     json = token_json
                 )
                 .in_scope(|| {
-                    let deserialized_json: UntaggedResult<
-                        GithubAccessToken,
-                        GithubAccessTokenError,
-                    > = serde_json::from_str(&token_json)
-                        .map_err(InternalServerError::from_error)?;
+                    let deserialized_json: GithubAccessTokenResponse =
+                        serde_json::from_str(&token_json)
+                            .map_err(InternalServerError::from_error)?;
 
-                    let oauth = deserialized_json.0.map_err(
-                        |GithubAccessTokenError {
-                             error,
-                             error_description,
-                             error_uri,
-                         }| {
-                            internal_server_error!(
-                                "github endpoint returned error",
-                                error,
-                                error_description,
-                                error_uri,
-                            )
-                        },
-                    )?;
+                    match deserialized_json {
+                        GithubAccessTokenResponse::Success {
+                            access_token,
+                            scope,
+                            token_type,
+                        } => {
+                            if !scope.is_empty() {
+                                return Err(internal_server_error!(
+                                    "github oauth scopes is not empty",
+                                    scope,
+                                ));
+                            }
+                            if !token_type.eq_ignore_ascii_case("bearer") {
+                                return Err(internal_server_error!(
+                                    "github oauth token type is not bearer",
+                                    token_type,
+                                ));
+                            }
 
-                    if !oauth.scope.is_empty() {
-                        return Err(internal_server_error!(
-                            "github oauth scopes is not empty",
-                            oauth.scope,
-                        ));
+                            Ok(Secret::new(access_token))
+                        }
+                        GithubAccessTokenResponse::Failure {
+                            error,
+                            error_description,
+                            error_uri,
+                        } => Err(internal_server_error!(
+                            "github endpoint returned error",
+                            error,
+                            error_description,
+                            error_uri,
+                        )),
                     }
-                    if !oauth.token_type.eq_ignore_ascii_case("bearer") {
-                        return Err(internal_server_error!(
-                            "github oauth token type is not bearer",
-                            oauth.token_type,
-                        ));
-                    }
-
-                    Ok(oauth)
                 })?;
 
-                let token_created_at = OffsetDateTime::now_utc();
+                let auth = GithubAuthentication::create(access_token).await?;
 
-                // TODO: macro or smthn for error_span, in_scope, in_current_span
-                let client = error_span!("building octocrab client").in_scope(|| {
-                    octocrab::OctocrabBuilder::new()
-                        .oauth(octocrab::auth::OAuth {
-                            access_token: oauth.access_token.clone().into(),
-                            token_type: "bearer".into(),
-                            scope: vec![],
-                        })
-                        .build()
-                        .map_err(InternalServerError::from_error)
-                })?;
-
-                let user = InternalServerError::wrap(
-                    client.current().user(),
-                    error_span!("getting current user"),
-                )
-                .await?;
-
+                let span = error_span!("logging in github account", user.id = auth.user_id.0);
                 let new_session = database
-                    .login_user_by_github(
-                        user_session.map(|s| s.id),
-                        entity::github_auth::Model {
-                            // Postgres does not have u64 :(
-                            user_id: user.id.0.to_string(),
-                            access_token: oauth.access_token,
-                            created_at: token_created_at,
-                        },
-                    )
-                    .instrument(error_span!(
-                        "logging in github account",
-                        user.id = user.id.0
-                    ))
+                    .login_user_by_github(user_session.map(|s| s.id), auth)
+                    .instrument(span)
                     .await?;
 
                 Ok(Either::E1((
@@ -191,7 +161,68 @@ pub async fn login(
     } else {
         Ok(Either::E2(Redirect::to(&format!(
             "https://github.com/login/oauth/authorize?client_id={}&redirect_uri={}",
-            github.client_id, github.redirect_uri
+            GITHUB_ENVIRONMENT.client_id, GITHUB_ENVIRONMENT.redirect_uri
         ))))
+    }
+}
+
+#[derive(Debug)]
+pub struct GithubAuthentication {
+    access_token: SecretString,
+
+    pub user_id: UserId,
+    pub created_at: OffsetDateTime,
+}
+
+impl GithubAuthentication {
+    async fn create(access_token: Secret<String>) -> Result<Self, InternalServerError> {
+        let mut auth = Self {
+            access_token,
+            user_id: UserId(u64::MAX), // Populate later
+            created_at: OffsetDateTime::now_utc(),
+        };
+
+        let current_user = InternalServerError::wrap(
+            auth.as_client()?.current().user(),
+            error_span!("fetching current user"),
+        )
+        .await?;
+
+        auth.user_id = current_user.id; // Populates here
+
+        Ok(auth)
+    }
+
+    #[tracing::instrument(skip(self))]
+    pub fn as_client(&self) -> Result<octocrab::Octocrab, InternalServerError> {
+        octocrab::OctocrabBuilder::new()
+            .oauth(octocrab::auth::OAuth {
+                access_token: self.access_token.clone(),
+                token_type: "bearer".into(),
+                scope: vec![],
+            })
+            .build()
+            .map_err(InternalServerError::from_error)
+    }
+
+    pub fn into_model(self) -> entity::github_auth::Model {
+        entity::github_auth::Model {
+            user_id: self.user_id.to_string(),
+            access_token: self.access_token.expose_secret().clone(),
+            created_at: self.created_at,
+        }
+    }
+
+    pub fn from_model(model: entity::github_auth::Model) -> Self {
+        Self {
+            access_token: model.access_token.into(),
+            user_id: UserId(
+                model
+                    .user_id
+                    .parse()
+                    .expect("user id should never be a non-integer"),
+            ),
+            created_at: model.created_at,
+        }
     }
 }

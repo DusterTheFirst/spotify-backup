@@ -13,7 +13,7 @@ strategy = "rolling"
 BIND   = "[::]:8080"
 DOMAIN = "backup.spotify.dusterthefirst.com"
 
-RUST_LOG = "info,tower_http=debug,spotify_backup=debug,axum::rejection=trace,rspotify=warn"
+RUST_LOG = "info,spotify_backup=debug,axum::rejection=trace,rspotify=warn"
 
 SPOTIFY_CLIENT_ID    = "be256626b1c24fc981ca6ed2c29b012f"
 SPOTIFY_REDIRECT_URI = "https://backup.spotify.dusterthefirst.com/login/spotify"

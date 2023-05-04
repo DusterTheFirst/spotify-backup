@@ -6,10 +6,14 @@ use axum::{
     RequestPartsExt,
 };
 use axum_extra::either::Either3;
+use rspotify::prelude::OAuthClient;
 use sea_orm::prelude::Uuid;
 use time::OffsetDateTime;
+use tracing::error_span;
 
 use crate::{database::Database, pages::InternalServerError};
+
+use self::{github::GithubAuthentication, spotify::SpotifyAuthentication};
 
 use super::session::{UserSession, UserSessionRejection};
 
@@ -41,19 +45,40 @@ pub struct IncompleteAccount {
     pub created_at: OffsetDateTime,
 
     #[doc(hidden)]
-    pub github: Option<entity::github_auth::Model>,
+    pub github: Option<GithubAuthentication>,
     #[doc(hidden)]
-    pub spotify: Option<entity::spotify_auth::Model>,
+    pub spotify: Option<SpotifyAuthentication>,
 }
 
 impl IncompleteAccount {
-    pub async fn spotify_user(&self) -> Option<rspotify::model::PrivateUser> {
-        // rspotify::AuthCodePkceSpotify::new(creds, oauth) FIXME: make one way to create a client, also global state to store client creds?
-        todo!()
+    pub async fn spotify_user(
+        &self,
+    ) -> Result<Option<rspotify::model::PrivateUser>, InternalServerError> {
+        Ok(if let Some(spotify) = &self.spotify {
+            Some(
+                InternalServerError::wrap(
+                    spotify.as_client().current_user(),
+                    error_span!("fetching spotify user", account.id = %self.id),
+                )
+                .await?,
+            )
+        } else {
+            None
+        })
     }
 
-    pub async fn github_user(&self) -> Option<octocrab::models::User> {
-        todo!()
+    pub async fn github_user(&self) -> Result<Option<octocrab::models::User>, InternalServerError> {
+        Ok(if let Some(github) = &self.github {
+            Some(
+                InternalServerError::wrap(
+                    github.as_client()?.current().user(),
+                    error_span!("fetching github user", account.id = %self.id),
+                )
+                .await?,
+            )
+        } else {
+            None
+        })
     }
 }
 
@@ -134,8 +159,8 @@ pub struct CompleteAccount {
     pub id: Uuid,
     pub created_at: OffsetDateTime,
 
-    github: entity::github_auth::Model,
-    spotify: entity::spotify_auth::Model,
+    github: GithubAuthentication,
+    spotify: SpotifyAuthentication,
 }
 
 #[async_trait]

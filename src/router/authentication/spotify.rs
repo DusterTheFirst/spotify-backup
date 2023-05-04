@@ -4,14 +4,17 @@ use axum::{
 };
 use axum_extra::either::Either;
 use rspotify::{
-    prelude::{Id, OAuthClient},
-    scopes, AuthCodeSpotify,
+    model::{PrivateUser, UserId},
+    prelude::OAuthClient,
+    scopes, AuthCodeSpotify, Token,
 };
+use secrecy::{ExposeSecret, SecretString};
 use serde::Deserialize;
 use time::OffsetDateTime;
 use tracing::{debug, error_span, trace};
 
 use crate::{
+    environment::SPOTIFY_ENVIRONMENT,
     internal_server_error,
     pages::InternalServerError,
     router::{session::UserSession, AppState},
@@ -24,40 +27,18 @@ pub enum SpotifyAuthCodeResponse {
     Failure { error: String, state: String },
 }
 
-pub fn from_rspotify(
-    token: rspotify::Token,
-    user_id: rspotify::model::UserId,
-) -> entity::spotify_auth::Model {
-    entity::spotify_auth::Model {
-        access_token: token.access_token,
-        expires_at: time::OffsetDateTime::from_unix_timestamp(
-            token
-                .expires_at
-                .expect("rspotify token should have a calculated expiration date")
-                .timestamp(),
-        )
-        .expect("UNIX timestamp returned from chrono should be valid"),
-        refresh_token: token
-            .refresh_token
-            .expect("rspotify token should contain refresh token"),
-        user_id: user_id.id().to_string(),
-        created_at: OffsetDateTime::now_utc(),
-    }
-}
-
 pub async fn login(
-    State(AppState {
-        spotify, database, ..
-    }): State<AppState>,
+    State(AppState { database, .. }): State<AppState>,
     user_session: Option<UserSession>,
     query: Option<Query<SpotifyAuthCodeResponse>>,
 ) -> Result<Either<(UserSession, Redirect), Redirect>, InternalServerError> {
     let required_scopes = scopes!("playlist-read-private", "user-library-read");
 
+    // FIXME: unify?
     let auth = AuthCodeSpotify::new(
-        spotify.credentials.clone(),
+        SPOTIFY_ENVIRONMENT.credentials.clone(),
         rspotify::OAuth {
-            redirect_uri: spotify.redirect_uri.to_string(),
+            redirect_uri: SPOTIFY_ENVIRONMENT.redirect_uri.to_string(),
             scopes: required_scopes.clone(),
             ..Default::default()
         },
@@ -109,7 +90,7 @@ pub async fn login(
                 let new_session = database
                     .login_user_by_spotify(
                         user_session.map(|s| s.id),
-                        from_rspotify(token, user.id.clone()),
+                        SpotifyAuthentication::create(token, user),
                     )
                     .await?;
 
@@ -125,5 +106,72 @@ pub async fn login(
             .expect("authorization url should be valid");
 
         Ok(Either::E2(Redirect::to(&auth_url)))
+    }
+}
+
+#[derive(Debug)]
+pub struct SpotifyAuthentication {
+    access_token: SecretString,
+    refresh_token: SecretString,
+
+    pub user_id: UserId<'static>,
+    pub expires_at: OffsetDateTime,
+    pub created_at: OffsetDateTime,
+}
+
+impl SpotifyAuthentication {
+    fn create(token: Token, user: PrivateUser) -> Self {
+        Self {
+            access_token: SecretString::new(token.access_token),
+            refresh_token: token
+                .refresh_token
+                .map(SecretString::new)
+                .expect("refresh token should exist"),
+            user_id: user.id,
+            expires_at: time::OffsetDateTime::from_unix_timestamp(
+                token
+                    .expires_at
+                    .expect("rspotify token should have a calculated expiration date")
+                    .timestamp(),
+            )
+            .expect("UNIX timestamp returned from chrono should be valid"),
+            created_at: OffsetDateTime::now_utc(),
+        }
+    }
+
+    pub fn as_client(&self) -> AuthCodeSpotify {
+        AuthCodeSpotify::from_token(Token {
+            access_token: self.access_token.expose_secret().clone(),
+            expires_in: chrono::Duration::seconds(0),
+            expires_at: Some(chrono::DateTime::from_utc(
+                chrono::NaiveDateTime::from_timestamp_millis(
+                    self.expires_at.unix_timestamp() * 1000,
+                )
+                .expect("UNIX timestamp returned from time should be valid"),
+                chrono::Utc,
+            )),
+            refresh_token: Some(self.refresh_token.expose_secret().clone()),
+            scopes: scopes!("playlist-read-private", "user-library-read"),
+        })
+    }
+
+    pub fn into_model(self) -> entity::spotify_auth::Model {
+        entity::spotify_auth::Model {
+            user_id: self.user_id.to_string(),
+            access_token: self.access_token.expose_secret().clone(),
+            expires_at: self.expires_at,
+            refresh_token: self.refresh_token.expose_secret().clone(),
+            created_at: self.created_at,
+        }
+    }
+
+    pub fn from_model(model: entity::spotify_auth::Model) -> Self {
+        Self {
+            access_token: SecretString::new(model.access_token),
+            refresh_token: SecretString::new(model.refresh_token),
+            user_id: UserId::from_id(model.user_id).expect("user id should be valid"),
+            expires_at: model.expires_at,
+            created_at: model.created_at,
+        }
     }
 }

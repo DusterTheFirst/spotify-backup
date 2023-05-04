@@ -1,20 +1,19 @@
-use axum::response::{IntoResponse, Response};
 use dioxus::prelude::*;
-use futures::join;
 use rspotify::prelude::Id;
+use tokio::try_join;
 
 use crate::router::authentication::IncompleteUser;
 
-use super::Page;
+use super::{InternalServerError, Page};
 
-pub async fn account(current_user: IncompleteUser) -> Response {
-    let (spotify_user, github_user) = join!(
+pub async fn account(current_user: IncompleteUser) -> Result<Page<'static>, InternalServerError> {
+    let (spotify_user, github_user) = try_join!(
         current_user.account.spotify_user(),
         current_user.account.github_user()
-    );
+    )?;
     let user_complete = current_user.is_complete();
 
-    Page {
+    Ok(Page {
         title: rsx! { "Account" },
         content: rsx! {
             h1 { "Account" }
@@ -87,6 +86,5 @@ pub async fn account(current_user: IncompleteUser) -> Response {
                 }
             }
         },
-    }
-    .into_response()
+    })
 }
