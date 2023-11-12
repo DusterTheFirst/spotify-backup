@@ -1,0 +1,10 @@
+{
+  "name": "playlist-backup-for-spotify",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {},
+  "dependencies": {
+    "@supabase/supabase-js": "^2.38.4"
+  }
+}
