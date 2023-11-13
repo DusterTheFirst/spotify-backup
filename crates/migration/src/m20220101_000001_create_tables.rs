@@ -9,8 +9,36 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
+                    .table(Account::Table)
+                    .if_not_exists()
+                    .col(ColumnDef::new(Account::Id).primary_key().uuid().not_null())
+                    .col(
+                        ColumnDef::new(Account::CreatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null(),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_table(
+                Table::create()
                     .table(SpotifyAuth::Table)
                     .if_not_exists()
+                    .col(
+                        ColumnDef::new(SpotifyAuth::AccountId)
+                            .unique_key()
+                            .uuid()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .to(Account::Table, Account::Id)
+                            .from(SpotifyAuth::Table, SpotifyAuth::AccountId)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .col(
                         ColumnDef::new(SpotifyAuth::UserId)
                             .primary_key()
@@ -43,6 +71,19 @@ impl MigrationTrait for Migration {
                     .table(GithubAuth::Table)
                     .if_not_exists()
                     .col(
+                        ColumnDef::new(GithubAuth::AccountId)
+                            .unique_key()
+                            .uuid()
+                            .not_null(),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .to(Account::Table, Account::Id)
+                            .from(GithubAuth::Table, GithubAuth::AccountId)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .col(
                         ColumnDef::new(GithubAuth::UserId)
                             .primary_key()
                             .string()
@@ -51,42 +92,6 @@ impl MigrationTrait for Migration {
                     .col(ColumnDef::new(GithubAuth::AccessToken).string().not_null())
                     .col(
                         ColumnDef::new(GithubAuth::CreatedAt)
-                            .timestamp_with_time_zone()
-                            .not_null(),
-                    )
-                    .to_owned(),
-            )
-            .await?;
-
-        manager
-            .create_table(
-                Table::create()
-                    .table(Account::Table)
-                    .if_not_exists()
-                    .col(ColumnDef::new(Account::Id).primary_key().uuid().not_null())
-                    .col(
-                        ColumnDef::new(Account::Spotify)
-                            .unique_key()
-                            .string()
-                            .null(),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .to(SpotifyAuth::Table, SpotifyAuth::UserId)
-                            .from(Account::Table, Account::Spotify)
-                            .on_delete(ForeignKeyAction::SetNull)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
-                    .col(ColumnDef::new(Account::Github).unique_key().string().null())
-                    .foreign_key(
-                        ForeignKey::create()
-                            .to(GithubAuth::Table, GithubAuth::UserId)
-                            .from(Account::Table, Account::Github)
-                            .on_delete(ForeignKeyAction::SetNull)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
-                    .col(
-                        ColumnDef::new(Account::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
@@ -147,6 +152,7 @@ impl MigrationTrait for Migration {
 #[derive(Iden)]
 enum SpotifyAuth {
     Table,
+    AccountId,
     UserId,
     AccessToken,
     ExpiresAt,
@@ -157,6 +163,7 @@ enum SpotifyAuth {
 #[derive(Iden)]
 enum GithubAuth {
     Table,
+    AccountId,
     UserId,
     AccessToken,
     CreatedAt,
@@ -166,8 +173,6 @@ enum GithubAuth {
 enum Account {
     Table,
     Id,
-    Spotify,
-    Github,
     CreatedAt,
 }
 
