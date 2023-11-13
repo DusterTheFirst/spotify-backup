@@ -67,7 +67,7 @@ impl IncompleteAccount {
         })
     }
 
-    pub async fn github_user(&self) -> Result<Option<octocrab::models::User>, InternalServerError> {
+    pub async fn github_user(&self) -> Result<Option<octocrab::models::Author>, InternalServerError> {
         Ok(if let Some(github) = &self.github {
             Some(
                 InternalServerError::wrap(

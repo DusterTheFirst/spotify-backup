@@ -3,8 +3,11 @@
 
 use std::{borrow::Cow, env};
 
+use color_eyre::eyre::Context;
+use database::Database;
 use tracing_subscriber::{prelude::*, EnvFilter};
 
+mod backup;
 mod database;
 mod environment;
 mod pages;
@@ -28,8 +31,6 @@ fn main() -> Result<(), color_eyre::Report> {
         release: Some(git_version::git_version!(args = ["--always", "--abbrev=40"]).into()),
         sample_rate: 1.0,
         traces_sample_rate: 0.0, // TODO: make not 0, but also not spam
-        enable_profiling: true,
-        profiles_sample_rate: 1.0,
         attach_stacktrace: true,
         send_default_pii: true,
         server_name: env::var("FLY_REGION").map(Cow::from).ok(),
@@ -45,5 +46,20 @@ fn main() -> Result<(), color_eyre::Report> {
         .enable_all()
         .build()
         .expect("tokio runtime builder should succeed")
-        .block_on(router::router())
+        .block_on(async {
+            let database = Database::connect()
+                .await
+                .wrap_err("failed to setup to database")?;
+
+            let (backup, router) = tokio::join!(
+                tokio::spawn(backup::backup(database.clone())),
+                tokio::spawn(router::router(database))
+            );
+
+            // FIXME: stupid
+            router??;
+            backup?;
+
+            Ok(())
+        })
 }

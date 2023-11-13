@@ -30,11 +30,7 @@ pub struct AppState {
     pub reqwest: reqwest::Client,
 }
 
-pub async fn router() -> color_eyre::Result<()> {
-    let database = Database::connect()
-        .await
-        .wrap_err("failed to setup to database")?;
-
+pub async fn router(database: Database) -> color_eyre::Result<()> {
     let state = AppState {
         database,
         reqwest: reqwest::Client::builder()

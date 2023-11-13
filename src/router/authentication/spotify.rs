@@ -143,7 +143,7 @@ impl SpotifyAuthentication {
         AuthCodeSpotify::from_token(Token {
             access_token: self.access_token.expose_secret().clone(),
             expires_in: chrono::Duration::seconds(0),
-            expires_at: Some(chrono::DateTime::from_utc(
+            expires_at: Some(chrono::DateTime::from_naive_utc_and_offset(
                 chrono::NaiveDateTime::from_timestamp_millis(
                     self.expires_at.unix_timestamp() * 1000,
                 )

@@ -5,4 +5,4 @@ version = "0.1.0"
 
 [dependencies]
 cansi  = "2.2.1"
-dioxus = { version = "0.3.2", default-features = false, features = ["html", "macro"] }
+dioxus = { workspace = true }

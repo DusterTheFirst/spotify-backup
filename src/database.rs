@@ -1,11 +1,12 @@
 use std::{env, fmt::Debug};
 
 use entity::{account, github_auth, prelude::*, spotify_auth, user_session};
+use futures::{Stream, TryFutureExt};
 use migration::{Migrator, MigratorTrait, OnConflict};
 use rspotify::prelude::Id;
 use sea_orm::{
-    prelude::*, ActiveValue, ConnectOptions, DatabaseTransaction, IntoActiveModel, QueryTrait,
-    TransactionError, TransactionTrait,
+    prelude::*, ActiveValue, ConnectOptions, DatabaseTransaction, IntoActiveModel, QuerySelect,
+    QueryTrait, TransactionError, TransactionTrait,
 };
 use time::OffsetDateTime;
 use tracing::{error_span, info, Instrument};
@@ -43,6 +44,20 @@ impl Database {
         Migrator::up(&connection, None).await?;
 
         Ok(Database { connection })
+    }
+}
+
+impl Database {
+    #[tracing::instrument(skip(self))]
+    pub async fn list_users(
+        &self,
+    ) -> Result<impl Stream<Item = Result<account::Model, DbErr>> + Send + '_, InternalServerError>
+    {
+        InternalServerError::wrap(
+            Account::find().stream(&self.connection),
+            error_span!("finding all accounts"),
+        )
+        .await
     }
 }
 
