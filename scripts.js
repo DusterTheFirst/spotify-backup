@@ -11,8 +11,14 @@ sb.auth.onAuthStateChange((event, session) => {
 
     const user = session?.user;
 
-    document.getElementById("debug").innerText = JSON.stringify(
+    document.getElementById("metadata").innerText = JSON.stringify(
         user?.user_metadata,
+        undefined,
+        4
+    );
+
+    document.getElementById("auth").innerText = JSON.stringify(
+        user?.app_metadata,
         undefined,
         4
     );
