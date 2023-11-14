@@ -14,6 +14,7 @@ use time::OffsetDateTime;
 use tracing::{debug, error_span, trace};
 
 use crate::{
+    database::id::AccountId,
     environment::SPOTIFY_ENVIRONMENT,
     internal_server_error,
     pages::InternalServerError,
@@ -155,8 +156,9 @@ impl SpotifyAuthentication {
         })
     }
 
-    pub fn into_model(self) -> entity::spotify_auth::Model {
+    pub fn into_model_for_account(self, account_id: AccountId) -> entity::spotify_auth::Model {
         entity::spotify_auth::Model {
+            account_id: account_id.into_uuid(),
             user_id: self.user_id.to_string(),
             access_token: self.access_token.expose_secret().clone(),
             expires_at: self.expires_at,

@@ -14,7 +14,7 @@ use crate::{
     environment::GITHUB_ENVIRONMENT,
     internal_server_error,
     pages::InternalServerError,
-    router::{session::UserSession, AppState},
+    router::{session::UserSession, AppState}, database::id::AccountId,
 };
 
 #[derive(Debug, Deserialize)]
@@ -205,8 +205,9 @@ impl GithubAuthentication {
             .map_err(InternalServerError::from_error)
     }
 
-    pub fn into_model(self) -> entity::github_auth::Model {
+    pub fn into_model_for_account(self, account_id: AccountId) -> entity::github_auth::Model {
         entity::github_auth::Model {
+            account_id: account_id.into_uuid(),
             user_id: self.user_id.to_string(),
             access_token: self.access_token.expose_secret().clone(),
             created_at: self.created_at,

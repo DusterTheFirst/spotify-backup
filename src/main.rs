@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-#![deny(clippy::unwrap_in_result, clippy::unwrap_used)]
+#![deny(clippy::unwrap_in_result, clippy::unwrap_used, unused_must_use)]
 
 use std::{borrow::Cow, env};
 
