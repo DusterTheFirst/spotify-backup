@@ -55,6 +55,8 @@ pub async fn router(database: Database) -> color_eyre::Result<()> {
         .route("/login/spotify", get(authentication::spotify::login))
         .route("/login/github", get(authentication::github::login))
         .route("/logout", get(authentication::logout))
+        .route("/logout/delete", get(authentication::delete))
+        .route("/logout/github", get(authentication::github::logout))
         // TODO: Image resizing/optimization
         .route("/favicon.ico", get(favicon))
         .route("/health", get(|| async { "OK" }))

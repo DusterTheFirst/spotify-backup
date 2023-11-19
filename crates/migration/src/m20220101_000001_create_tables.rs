@@ -13,6 +13,7 @@ impl MigrationTrait for Migration {
                     .if_not_exists()
                     .col(
                         ColumnDef::new(SpotifyAuth::UserId)
+                            .unique_key()
                             .primary_key()
                             .string()
                             .not_null(),
@@ -40,17 +41,30 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(GithubAuth::Table)
+                    .table(Account::Table)
                     .if_not_exists()
                     .col(
-                        ColumnDef::new(GithubAuth::UserId)
+                        ColumnDef::new(Account::Id)
                             .primary_key()
+                            .unique_key()
+                            .uuid()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(Account::Spotify)
+                            .unique_key()
                             .string()
                             .not_null(),
                     )
-                    .col(ColumnDef::new(GithubAuth::AccessToken).string().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .to(SpotifyAuth::Table, SpotifyAuth::UserId)
+                            .from(Account::Table, Account::Spotify)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
                     .col(
-                        ColumnDef::new(GithubAuth::CreatedAt)
+                        ColumnDef::new(Account::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
@@ -61,32 +75,31 @@ impl MigrationTrait for Migration {
         manager
             .create_table(
                 Table::create()
-                    .table(Account::Table)
+                    .table(GithubAuth::Table)
                     .if_not_exists()
-                    .col(ColumnDef::new(Account::Id).primary_key().uuid().not_null())
                     .col(
-                        ColumnDef::new(Account::Spotify)
+                        ColumnDef::new(GithubAuth::Account)
                             .unique_key()
-                            .string()
-                            .null(),
+                            .uuid()
+                            .not_null(),
                     )
                     .foreign_key(
                         ForeignKey::create()
-                            .to(SpotifyAuth::Table, SpotifyAuth::UserId)
-                            .from(Account::Table, Account::Spotify)
-                            .on_delete(ForeignKeyAction::SetNull)
-                            .on_update(ForeignKeyAction::Cascade),
-                    )
-                    .col(ColumnDef::new(Account::Github).unique_key().string().null())
-                    .foreign_key(
-                        ForeignKey::create()
-                            .to(GithubAuth::Table, GithubAuth::UserId)
-                            .from(Account::Table, Account::Github)
-                            .on_delete(ForeignKeyAction::SetNull)
+                            .to(Account::Table, Account::Id)
+                            .from(GithubAuth::Table, GithubAuth::Account)
+                            .on_delete(ForeignKeyAction::Cascade)
                             .on_update(ForeignKeyAction::Cascade),
                     )
                     .col(
-                        ColumnDef::new(Account::CreatedAt)
+                        ColumnDef::new(GithubAuth::UserId)
+                            .unique_key()
+                            .primary_key()
+                            .string()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(GithubAuth::AccessToken).string().not_null())
+                    .col(
+                        ColumnDef::new(GithubAuth::CreatedAt)
                             .timestamp_with_time_zone()
                             .not_null(),
                     )
@@ -157,6 +170,7 @@ enum SpotifyAuth {
 #[derive(Iden)]
 enum GithubAuth {
     Table,
+    Account,
     UserId,
     AccessToken,
     CreatedAt,
@@ -167,7 +181,6 @@ enum Account {
     Table,
     Id,
     Spotify,
-    Github,
     CreatedAt,
 }
 

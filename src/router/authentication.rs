@@ -1,17 +1,20 @@
 use axum::{
     async_trait,
-    extract::{FromRef, FromRequestParts, State},
+    extract::{FromRef, FromRequestParts, Query, State},
     http::request,
-    response::{IntoResponse, Redirect, Response},
+    response::{Html, IntoResponse, Redirect, Response},
     RequestPartsExt,
 };
 use axum_extra::either::Either3;
 use rspotify::prelude::OAuthClient;
-use sea_orm::prelude::Uuid;
+use serde::Deserialize;
 use time::OffsetDateTime;
 use tracing::error_span;
 
-use crate::{database::Database, pages::InternalServerError};
+use crate::{
+    database::{id::AccountId, Database},
+    pages::InternalServerError,
+};
 
 use self::{github::GithubAuthentication, spotify::SpotifyAuthentication};
 
@@ -33,46 +36,68 @@ pub async fn logout(
     }
 }
 
-#[derive(Debug)]
-pub struct IncompleteUser {
-    pub session: entity::user_session::Model,
-    pub account: IncompleteAccount,
+#[derive(Debug, Deserialize)]
+pub struct DeleteQuery {
+    decree: String,
+}
+
+const DECREE: &str = "I solemnly swear that I am deleting my account";
+
+pub async fn delete(
+    State(database): State<Database>,
+    user: Option<User>,
+    query: Option<Query<DeleteQuery>>,
+) -> Result<Response, InternalServerError> {
+    // FIXME: make this flow cleaner
+    if let Some(user) = user {
+        if let Some(query) = query {
+            if query.decree == DECREE {
+                let session = database.delete_current_user(user).await?;
+
+                Ok((session, Redirect::to("/")).into_response())
+            } else {
+                Ok(("Invalid decree, your account is not deleted").into_response())
+            }
+        } else {
+            Ok(Html(format!("<form action=\"/logout/delete\" method=\"get\"><label>Please type the following phrase: <pre>{DECREE}</pre> <input type=\"text\" name=\"decree\" /></label><button type=\"submit\">Delete my account</button><a href=\"/account\">Go back</a></form>")).into_response())
+        }
+    } else {
+        Ok(Redirect::to("/").into_response())
+    }
 }
 
 #[derive(Debug)]
-pub struct IncompleteAccount {
-    pub id: Uuid,
+pub struct User {
+    pub session: entity::user_session::Model,
+    pub account: Account,
+}
+
+#[derive(Debug)]
+pub struct Account {
+    pub id: AccountId,
     pub created_at: OffsetDateTime,
 
-    #[doc(hidden)]
+    pub spotify: SpotifyAuthentication,
     pub github: Option<GithubAuthentication>,
-    #[doc(hidden)]
-    pub spotify: Option<SpotifyAuthentication>,
 }
 
-impl IncompleteAccount {
-    pub async fn spotify_user(
-        &self,
-    ) -> Result<Option<rspotify::model::PrivateUser>, InternalServerError> {
-        Ok(if let Some(spotify) = &self.spotify {
-            Some(
-                InternalServerError::wrap(
-                    spotify.as_client().current_user(),
-                    error_span!("fetching spotify user", account.id = %self.id),
-                )
-                .await?,
-            )
-        } else {
-            None
-        })
+impl Account {
+    pub async fn spotify_user(&self) -> Result<rspotify::model::PrivateUser, InternalServerError> {
+        InternalServerError::wrap(
+            self.spotify.as_client().current_user(),
+            error_span!("fetching spotify user", account.id = ?self.id),
+        )
+        .await
     }
 
-    pub async fn github_user(&self) -> Result<Option<octocrab::models::Author>, InternalServerError> {
+    pub async fn github_user(
+        &self,
+    ) -> Result<Option<octocrab::models::Author>, InternalServerError> {
         Ok(if let Some(github) = &self.github {
             Some(
                 InternalServerError::wrap(
                     github.as_client()?.current().user(),
-                    error_span!("fetching github user", account.id = %self.id),
+                    error_span!("fetching github user", account.id = ?self.id),
                 )
                 .await?,
             )
@@ -82,39 +107,8 @@ impl IncompleteAccount {
     }
 }
 
-impl IncompleteUser {
-    pub fn is_complete(&self) -> bool {
-        self.account.github.is_some() && self.account.spotify.is_some()
-    }
-
-    #[allow(clippy::result_large_err)]
-    pub fn into_complete(self) -> Result<CompleteUser, IncompleteUser> {
-        match (self.account.github, self.account.spotify) {
-            (Some(github), Some(spotify)) => Ok(CompleteUser {
-                session: self.session,
-                account: CompleteAccount {
-                    id: self.account.id,
-                    created_at: self.account.created_at,
-
-                    spotify,
-                    github,
-                },
-            }),
-
-            (github, spotify) => Err(IncompleteUser {
-                session: self.session,
-                account: IncompleteAccount {
-                    github,
-                    spotify,
-                    ..self.account
-                },
-            }),
-        }
-    }
-}
-
 #[async_trait]
-impl<S> FromRequestParts<S> for IncompleteUser
+impl<S> FromRequestParts<S> for User
 where
     Database: FromRef<S>,
     S: Sync,
@@ -129,13 +123,13 @@ where
 
         match parts.extract::<UserSession>().await {
             Ok(user_session) => {
-                let incomplete_user = database
+                let user = database
                     .get_current_user(user_session.id)
                     .await
                     .map_err(Either3::E2)?;
 
-                if let Some(incomplete_user) = incomplete_user {
-                    return Ok(incomplete_user);
+                if let Some(user) = user {
+                    return Ok(user);
                 }
             }
             Err(UserSessionRejection::NoSessionCookie) => {}
@@ -145,42 +139,5 @@ where
         };
 
         Err(Either3::E1(Redirect::to("/")))
-    }
-}
-
-#[derive(Debug)]
-pub struct CompleteUser {
-    pub session: entity::user_session::Model,
-    pub account: CompleteAccount,
-}
-
-#[derive(Debug)]
-pub struct CompleteAccount {
-    pub id: Uuid,
-    pub created_at: OffsetDateTime,
-
-    github: GithubAuthentication,
-    spotify: SpotifyAuthentication,
-}
-
-#[async_trait]
-impl<S> FromRequestParts<S> for CompleteUser
-where
-    Database: FromRef<S>,
-    S: Sync,
-{
-    type Rejection = Either3<Redirect, InternalServerError, UserSessionRejection>;
-
-    async fn from_request_parts(
-        parts: &mut request::Parts,
-        state: &S,
-    ) -> Result<Self, Self::Rejection> {
-        IncompleteUser::from_request_parts(parts, state)
-            .await
-            .and_then(|incomplete| {
-                incomplete
-                    .into_complete()
-                    .map_err(|_incomplete| Either3::E1(Redirect::to("/account")))
-            })
     }
 }

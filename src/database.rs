@@ -1,12 +1,12 @@
 use std::{env, fmt::Debug};
 
 use entity::{account, github_auth, prelude::*, spotify_auth, user_session};
-use futures::{Stream, TryFutureExt};
+use futures::{Stream, TryStreamExt};
 use migration::{Migrator, MigratorTrait, OnConflict};
 use rspotify::prelude::Id;
 use sea_orm::{
-    prelude::*, ActiveValue, ConnectOptions, DatabaseTransaction, IntoActiveModel, QuerySelect,
-    QueryTrait, TransactionError, TransactionTrait,
+    prelude::*, ConnectOptions, DatabaseTransaction, DeleteResult, IntoActiveModel,
+    TransactionError, TransactionTrait,
 };
 use time::OffsetDateTime;
 use tracing::{error_span, info, Instrument};
@@ -15,12 +15,11 @@ use crate::{
     internal_server_error,
     pages::InternalServerError,
     router::authentication::{
-        github::GithubAuthentication, spotify::SpotifyAuthentication, IncompleteAccount,
-        IncompleteUser,
+        self, github::GithubAuthentication, spotify::SpotifyAuthentication, User,
     },
 };
 
-use self::id::UserSessionId;
+use self::id::{AccountId, UserSessionId};
 
 pub mod id;
 
@@ -47,17 +46,68 @@ impl Database {
     }
 }
 
+pub struct LazyUser<'db> {
+    connection: &'db DatabaseConnection,
+
+    model: account::Model,
+}
+
+impl<'db> LazyUser<'db> {
+    pub fn account(&self) -> &account::Model {
+        &self.model
+    }
+
+    #[tracing::instrument(skip_all, fields(account = ?self.model.id))]
+    pub async fn spotify(&self) -> Result<spotify_auth::Model, InternalServerError> {
+        InternalServerError::wrap(
+            self.model.find_related(SpotifyAuth).one(self.connection),
+            error_span!("retrieving spotify auth details", account_id = ?self.model.id, spotify_user = self.model.spotify),
+        )
+        .await?
+        .ok_or_else(|| internal_server_error!("assuming a complete user"))
+    }
+
+    #[tracing::instrument(skip_all, fields(account = ?self.model.id))]
+    pub async fn github(&self) -> Result<github_auth::Model, InternalServerError> {
+        InternalServerError::wrap(
+            self.model.find_related(GithubAuth).one(self.connection),
+            error_span!("retrieving github auth details", account_id = ?self.model.id),
+        )
+        .await?
+        .ok_or_else(|| internal_server_error!("assuming a complete user")) // FIXME: bad assumption
+    }
+}
+
 impl Database {
     #[tracing::instrument(skip(self))]
     pub async fn list_users(
         &self,
-    ) -> Result<impl Stream<Item = Result<account::Model, DbErr>> + Send + '_, InternalServerError>
-    {
-        InternalServerError::wrap(
+    ) -> Result<impl Stream<Item = Result<LazyUser, DbErr>> + Send + '_, InternalServerError> {
+        // let b = Account::find()
+        //     .join(
+        //         sea_orm::JoinType::LeftJoin,
+        //         account::Relation::SpotifyAuth.def(),
+        //     )
+        //     .column_as(spotify_auth::Column::AccessToken, "spotify_access_token")
+        //     .join(
+        //         sea_orm::JoinType::LeftJoin,
+        //         account::Relation::GithubAuth.def(),
+        //     )
+        //     .column_as(github_auth::Column::AccessToken, "github_access_token")
+        //     .build(sea_orm::DatabaseBackend::Postgres)
+        //     .to_string();
+
+        // tracing::info!("{b}");
+
+        Ok(InternalServerError::wrap(
             Account::find().stream(&self.connection),
             error_span!("finding all accounts"),
         )
-        .await
+        .await?
+        .map_ok(|model| LazyUser {
+            connection: &self.connection,
+            model,
+        }))
     }
 }
 
@@ -66,7 +116,7 @@ impl Database {
     pub async fn get_current_user(
         &self,
         session: UserSessionId,
-    ) -> Result<Option<IncompleteUser>, InternalServerError> {
+    ) -> Result<Option<User>, InternalServerError> {
         let session = get_user_session(&self.connection, session)
             .instrument(error_span!("finding user session and related account"))
             .await?;
@@ -76,7 +126,10 @@ impl Database {
                 account.find_related(SpotifyAuth).one(&self.connection),
                 error_span!("finding associated spotify authentication"),
             )
-            .await?;
+            .await?
+            .ok_or_else(|| {
+                internal_server_error!("spotify authentication must exist for a user")
+            })?;
 
             let github = InternalServerError::wrap(
                 account.find_related(GithubAuth).one(&self.connection),
@@ -84,14 +137,15 @@ impl Database {
             )
             .await?;
 
-            return Ok(Some(IncompleteUser {
+            return Ok(Some(User {
                 session,
-                account: IncompleteAccount {
-                    id: account.id,
+                account: authentication::Account {
                     created_at: account.created_at,
+                    id: AccountId::from_model(account),
+
+                    spotify: SpotifyAuthentication::from_model(spotify),
 
                     github: github.map(GithubAuthentication::from_model),
-                    spotify: spotify.map(SpotifyAuthentication::from_model),
                 },
             }));
         }
@@ -107,6 +161,39 @@ impl Database {
         let transaction = self
             .connection
             .transaction(|transaction| Box::pin(logout_user_session(transaction, session.id)))
+            .await;
+
+        match transaction {
+            Err(TransactionError::Connection(error)) => Err(InternalServerError::from_error(error)),
+            Err(TransactionError::Transaction(error)) => Err(error),
+            Ok(()) => Ok(crate::router::session::UserSession::remove()),
+        }
+    }
+
+    #[tracing::instrument(skip_all, fields(account = ?user.account.id))]
+    pub async fn delete_current_user(
+        &self,
+        user: User,
+    ) -> Result<crate::router::session::UserSession, InternalServerError> {
+        let transaction = self
+            .connection
+            .transaction(|transaction| {
+                Box::pin(async move {
+                    // Deleting the spotify authentication will cascade to the user account
+                    let DeleteResult { rows_affected } = InternalServerError::wrap(
+                        SpotifyAuth::delete(user.account.spotify.into_model().into_active_model())
+                            .exec(transaction),
+                        error_span!("deleting user"),
+                    )
+                    .await?;
+
+                    if rows_affected == 0 {
+                        tracing::warn!("attempted to delete a user that did not exist");
+                    }
+
+                    Ok(())
+                })
+            })
             .await;
 
         match transaction {
@@ -147,30 +234,14 @@ async fn logout_user_session(
     transaction: &DatabaseTransaction,
     session: UserSessionId,
 ) -> Result<(), InternalServerError> {
-    let user_session = get_user_session(transaction, session).await?;
+    let DeleteResult { rows_affected } = InternalServerError::wrap(
+        UserSession::delete_by_id(session.into_uuid()).exec(transaction),
+        error_span!("deleting current session"),
+    )
+    .await?;
 
-    if let Some((session, account)) = user_session {
-        InternalServerError::wrap(
-            session.delete(transaction),
-            error_span!("deleting current session"),
-        )
-        .await?;
-
-        // Delete an incomplete account if this session points to it and is the last session pointing to it
-        let other_sessions = InternalServerError::wrap(
-            account.find_related(UserSession).one(transaction),
-            error_span!("finding other sessions of account"),
-        )
-        .await?;
-
-        // TODO: consolidate this with IncompleteUser???
-        if (account.github.is_none() || account.spotify.is_none()) && other_sessions.is_none() {
-            InternalServerError::wrap(
-                account.delete(transaction),
-                error_span!("deleting current, incomplete account"),
-            )
-            .await?;
-        }
+    if rows_affected == 0 {
+        tracing::warn!(?session, "attempted to delete a session that did not exist");
     }
 
     Ok(())
@@ -178,9 +249,8 @@ async fn logout_user_session(
 
 impl Database {
     #[tracing::instrument(skip(self, spotify_auth), fields(spotify = spotify_auth.user_id.id()))]
-    pub async fn login_user_by_spotify(
+    pub async fn login_user(
         &self,
-        session: Option<UserSessionId>,
         spotify_auth: SpotifyAuthentication,
     ) -> Result<UserSessionId, InternalServerError> {
         self.connection
@@ -190,7 +260,7 @@ impl Database {
                     let spotify_id = model.user_id.clone();
 
                     // Update the saved spotify authentication details for this user
-                    InternalServerError::wrap(
+                    let spotify_auth = InternalServerError::wrap(
                         SpotifyAuth::insert(model.into_active_model())
                             .on_conflict(
                                 OnConflict::column(spotify_auth::Column::UserId)
@@ -203,19 +273,37 @@ impl Database {
                                     .to_owned(),
                             )
                             .exec_with_returning(transaction),
-                        error_span!("updating saved spotify authentication details"),
+                        error_span!(
+                            "updating saved spotify authentication details",
+                            spotify = spotify_id
+                        ),
                     )
                     .await?;
 
-                    let account = get_create_or_update_account(
-                        transaction,
-                        account::ActiveModel {
-                            spotify: ActiveValue::Set(Some(spotify_id)),
-                            ..Default::default()
-                        },
-                        session,
+                    let account = InternalServerError::wrap(
+                        spotify_auth.find_related(Account).one(transaction),
+                        error_span!("fetching account for spotify user", spotify_id),
                     )
                     .await?;
+
+                    let account = match account {
+                        Some(existing) => existing,
+                        None => {
+                            InternalServerError::wrap(
+                                Account::insert(
+                                    account::Model {
+                                        id: Uuid::new_v4(),
+                                        spotify: spotify_id.clone(),
+                                        created_at: OffsetDateTime::now_utc(),
+                                    }
+                                    .into_active_model(),
+                                )
+                                .exec_with_returning(transaction),
+                                error_span!("creating new account", spotify_id),
+                            )
+                            .await?
+                        }
+                    };
 
                     // TODO: session pruning periodically
                     let new_session = InternalServerError::wrap(
@@ -229,11 +317,11 @@ impl Database {
                             .into_active_model(),
                         )
                         .exec_with_returning(transaction),
-                        error_span!("creating new user session"),
+                        error_span!("creating new user session", account = ?account.id),
                     )
                     .await?;
 
-                    Ok(UserSessionId::from_user_session(new_session))
+                    Ok(UserSessionId::from_model(new_session))
                 })
             })
             .await
@@ -243,21 +331,21 @@ impl Database {
             })
     }
 
-    #[tracing::instrument(skip(self, github_auth), fields(github = github_auth.user_id.0))]
-    pub async fn login_user_by_github(
+    #[tracing::instrument(skip_all, fields(github = github_auth.user_id.0, user = ?user.account.id))]
+    pub async fn associate_github_to_account(
         &self,
-        session: Option<UserSessionId>,
+        user: User,
         github_auth: GithubAuthentication,
-    ) -> Result<UserSessionId, InternalServerError> {
+    ) -> Result<Result<(), GithubAccountAlreadyTakenError>, InternalServerError> {
         self.connection
             .transaction(|transaction| {
                 Box::pin(async move {
-                    let model = github_auth.into_model();
-                    let user_id = model.user_id.clone();
+                    let github_auth = github_auth.into_model(user.account.id);
+                    let github_id = github_auth.user_id.clone();
 
-                    // Update the saved spotify authentication details for this user
-                    InternalServerError::wrap(
-                        GithubAuth::insert(model.into_active_model())
+                    // Update the saved github authentication details for this user
+                    let github_auth = InternalServerError::wrap(
+                        GithubAuth::insert(github_auth.into_active_model())
                             .on_conflict(
                                 OnConflict::column(github_auth::Column::UserId)
                                     // Do not update created_at
@@ -265,37 +353,15 @@ impl Database {
                                     .to_owned(),
                             )
                             .exec_with_returning(transaction),
-                        error_span!("updating saved github authentication details"),
+                        error_span!("updating saved github authentication details", ?github_id),
                     )
                     .await?;
 
-                    let account = get_create_or_update_account(
-                        transaction,
-                        account::ActiveModel {
-                            github: ActiveValue::Set(Some(user_id)),
-                            ..Default::default()
-                        },
-                        session,
-                    )
-                    .await?;
+                    if github_auth.account != user.account.id.into_uuid() {
+                        return Ok(Err(GithubAccountAlreadyTakenError));
+                    }
 
-                    // TODO: session pruning periodically
-                    let new_session = InternalServerError::wrap(
-                        UserSession::insert(
-                            user_session::Model {
-                                created_at: OffsetDateTime::now_utc(),
-                                last_seen: OffsetDateTime::now_utc(),
-                                id: Uuid::new_v4(),
-                                account: account.id,
-                            }
-                            .into_active_model(),
-                        )
-                        .exec_with_returning(transaction),
-                        error_span!("creating new user session"),
-                    )
-                    .await?;
-
-                    Ok(UserSessionId::from_user_session(new_session))
+                    Ok(Ok(()))
                 })
             })
             .await
@@ -304,111 +370,18 @@ impl Database {
                 TransactionError::Transaction(error) => error,
             })
     }
-}
 
-/// This function will invalidate any session given to it, you must recreate a session after running this
-// TODO: reduce database calls?
-// FIXME: use type system to ensure account only deleted when wanted to be deleted (ie, session deletion account deletion propagation)
-#[tracing::instrument(skip(transaction))]
-pub async fn get_create_or_update_account(
-    transaction: &DatabaseTransaction,
-    model: account::ActiveModel,
-    session: Option<UserSessionId>,
-) -> Result<account::Model, InternalServerError> {
-    let spotify_filter = match &model.spotify {
-        ActiveValue::Set(Some(spotify)) | ActiveValue::Unchanged(Some(spotify)) => Some(spotify),
-        _ => None,
-    };
-
-    let github_filter = match &model.github {
-        ActiveValue::Set(Some(github)) | ActiveValue::Unchanged(Some(github)) => Some(github),
-        _ => None,
-    };
-
-    // First, try to find an account associated with this model by filtering
-    // by the provided service account
-    let account = InternalServerError::wrap(
-        Account::find()
-            .apply_if(spotify_filter, |q, value| {
-                q.filter(account::Column::Spotify.eq(value))
-            })
-            .apply_if(github_filter, |q, value| {
-                q.filter(account::Column::Github.eq(value))
-            })
-            .one(transaction),
-        error_span!("finding user already associated with this spotify account"),
-    )
-    .await?;
-
-    // If an account already exists with this
-    if let Some(account) = account {
-        // Delete old session
-        if let Some(session_id) = session {
-            let session = InternalServerError::wrap(
-                UserSession::find_by_id(session_id.into_uuid()).one(transaction),
-                error_span!("getting current session"),
+    #[tracing::instrument(skip_all, fields(user = ?user.account.id))]
+    pub async fn remove_github_from_account(&self, user: User) -> Result<(), InternalServerError> {
+        if let Some(github) = user.account.github {
+            InternalServerError::wrap_in_current_span(
+                GithubAuth::delete_by_id(github.user_id.to_string()).exec(&self.connection),
             )
             .await?;
-
-            match session {
-                Some(session) if account.id == session.account => {
-                    // Invalidate the current session, but keep the account around
-                    InternalServerError::wrap(
-                        session.delete(transaction),
-                        error_span!("deleting current session"),
-                    )
-                    .await?;
-                }
-                _ => {
-                    // Invalidate the current session removing any incomplete accounts
-                    logout_user_session(transaction, session_id)
-                        .instrument(error_span!("deleting old user session"))
-                        .await?;
-                }
-            }
         }
 
-        return Ok(account);
+        Ok(())
     }
-
-    // Associate the spotify user with the existing account
-    if let Some(session) = session {
-        let session = get_user_session(transaction, session).await?;
-
-        if let Some((session, account)) = session {
-            // Invalidate the current session, but keep the account around
-            InternalServerError::wrap(
-                session.delete(transaction),
-                error_span!("deleting current session"),
-            )
-            .await?;
-
-            // If no account has this spotify user already, add it to the current account
-            let account = InternalServerError::wrap(
-                Account::update(account::ActiveModel {
-                    id: ActiveValue::Set(account.id),
-                    ..model
-                })
-                .exec(transaction),
-                error_span!("updating existing account"),
-            )
-            .await?;
-
-            return Ok(account);
-        }
-    }
-
-    // If there is no current account, create one
-    let account = InternalServerError::wrap(
-        Account::insert(account::ActiveModel {
-            id: ActiveValue::Set(Uuid::new_v4()),
-            created_at: ActiveValue::Set(OffsetDateTime::now_utc()),
-            ..model
-        })
-        .exec_with_returning(transaction),
-        error_span!("creating new account"),
-    )
-    .await?;
-
-    Ok(account)
 }
+
+pub struct GithubAccountAlreadyTakenError;

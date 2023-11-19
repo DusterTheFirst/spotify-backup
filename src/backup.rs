@@ -20,7 +20,7 @@ pub async fn backup(database: Database) -> Infallible {
     let mut interval = tokio::time::interval_at(instant_now + time_till_next_hour, hour);
 
     loop {
-        interval.tick().await;
+        // interval.tick().await;
 
         tracing::info!("processing backups");
 
@@ -40,6 +40,13 @@ pub async fn backup(database: Database) -> Infallible {
                     continue;
                 }
             };
+
+            let spotify = user.spotify().await;
+            let github = user.github().await;
+
+            tracing::debug!(account = ?user.account(), ?spotify, ?github);
         }
+
+        panic!();
     }
 }

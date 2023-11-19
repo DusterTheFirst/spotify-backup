@@ -2,16 +2,20 @@ use dioxus::prelude::*;
 use rspotify::prelude::Id;
 use tokio::try_join;
 
-use crate::router::authentication::IncompleteUser;
+use crate::router::authentication::User;
 
 use super::{InternalServerError, Page};
 
-pub async fn account(current_user: IncompleteUser) -> Result<Page<'static>, InternalServerError> {
+pub async fn account(current_user: User) -> Result<Page<'static>, InternalServerError> {
     let (spotify_user, github_user) = try_join!(
         current_user.account.spotify_user(),
         current_user.account.github_user()
     )?;
-    let user_complete = current_user.is_complete();
+    let user_complete = github_user.is_some();
+
+    let spotify_name = spotify_user
+        .display_name
+        .unwrap_or_else(|| spotify_user.id.id().to_string());
 
     Ok(Page {
         title: rsx! { "Account" },
@@ -38,37 +42,30 @@ pub async fn account(current_user: IncompleteUser) -> Result<Page<'static>, Inte
                         hr {}
                     }
                 }
+                h2 { "Music source" }
                 li {
-                    if let Some(user) = spotify_user {
-                        let spotify_name = user.display_name.unwrap_or_else(|| user.id.id().to_string());
-
-                        rsx! {
-                            "spotify already authenticated as {spotify_name}"
-                            a { href: "/login/spotify",
-                                "change spotify account"
-                            }
-                        }
-                    } else{
-                        rsx! {
-                            a { href: "/login/spotify",
-                                "log in with spotify"
-                            }
-                        }
+                    "spotify authenticated as {spotify_name}"
+                    a { href: "/login/spotify",
+                        "change spotify account"
                     }
                 }
+                h2 { "Backup destination" }
                 li {
                     if let Some(user) = github_user {
                         let github_name = user.login;
 
                         rsx! {
-                            "github already authenticated as {github_name}"
+                            "github authenticated as {github_name}"
                             a { href: "/login/github",
                                 "change github account"
+                            }
+                            a { href: "/logout/github",
+                                "remove github account"
                             }
                         }
                     } else { rsx! {
                             a { href: "/login/github",
-                                "log in with github"
+                                "add github account"
                             }
                         }
                     }

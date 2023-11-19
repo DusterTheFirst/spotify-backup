@@ -8,28 +8,20 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     #[sea_orm(unique)]
-    pub spotify: Option<String>,
-    #[sea_orm(unique)]
-    pub github: Option<String>,
+    pub spotify: String,
     pub created_at: TimeDateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(
-        belongs_to = "super::github_auth::Entity",
-        from = "Column::Github",
-        to = "super::github_auth::Column::UserId",
-        on_update = "Cascade",
-        on_delete = "SetNull"
-    )]
+    #[sea_orm(has_one = "super::github_auth::Entity")]
     GithubAuth,
     #[sea_orm(
         belongs_to = "super::spotify_auth::Entity",
         from = "Column::Spotify",
         to = "super::spotify_auth::Column::UserId",
         on_update = "Cascade",
-        on_delete = "SetNull"
+        on_delete = "Cascade"
     )]
     SpotifyAuth,
     #[sea_orm(has_many = "super::user_session::Entity")]

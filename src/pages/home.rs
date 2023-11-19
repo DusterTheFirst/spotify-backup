@@ -1,12 +1,13 @@
 use dioxus::prelude::*;
 
-use crate::router::authentication::IncompleteUser;
+use crate::router::authentication::User;
 
 use super::Page;
 
-pub async fn home(account: Option<IncompleteUser>) -> Page<'static> {
+// FIXME: too many different routes/cases.
+pub async fn home(account: Option<User>) -> Page<'static> {
     let navigation = match account {
-        Some(user) if user.is_complete() => rsx! {
+        Some(user) if user.account.github.is_some() => rsx! {
             section {
                 h2 { "Welcome back" }
                 ul {
@@ -30,7 +31,6 @@ pub async fn home(account: Option<IncompleteUser>) -> Page<'static> {
             section {
                 h2 { "Welcome" }
                 ul {
-                    li { a { href: "/login/github", "Login With Github" } }
                     li { a { href: "/login/spotify", "Login With Spotify" } }
                 }
             }
