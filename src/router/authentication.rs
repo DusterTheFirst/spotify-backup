@@ -82,24 +82,19 @@ pub struct Account {
 }
 
 impl Account {
+    #[tracing::instrument(skip(self), fields(account.id = ?self.id))]
     pub async fn spotify_user(&self) -> Result<rspotify::model::PrivateUser, InternalServerError> {
-        InternalServerError::wrap(
-            self.spotify.as_client().current_user(),
-            error_span!("fetching spotify user", account.id = ?self.id),
-        )
-        .await
+        InternalServerError::wrap_in_current_span(self.spotify.as_client().current_user()).await
     }
 
+    #[tracing::instrument(skip(self), fields(account.id = ?self.id))]
     pub async fn github_user(
         &self,
     ) -> Result<Option<octocrab::models::Author>, InternalServerError> {
         Ok(if let Some(github) = &self.github {
             Some(
-                InternalServerError::wrap(
-                    github.as_client()?.current().user(),
-                    error_span!("fetching github user", account.id = ?self.id),
-                )
-                .await?,
+                InternalServerError::wrap_in_current_span(github.as_client()?.current().user())
+                    .await?,
             )
         } else {
             None

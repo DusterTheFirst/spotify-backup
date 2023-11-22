@@ -47,6 +47,7 @@ pub async fn account(current_user: User) -> Result<Page<'static>, InternalServer
                     "spotify authenticated as {spotify_name}"
                     a { href: "/login/spotify",
                         "change spotify account"
+                        // TODO: redirect to spotify auth where user is always prompted, to allow for user switching
                     }
                 }
                 h2 { "Backup destination" }
@@ -58,6 +59,7 @@ pub async fn account(current_user: User) -> Result<Page<'static>, InternalServer
                             "github authenticated as {github_name}"
                             a { href: "/login/github",
                                 "change github account"
+                                // TODO: redirect to github auth where user is always prompted, to allow for user switching
                             }
                             a { href: "/logout/github",
                                 "remove github account"

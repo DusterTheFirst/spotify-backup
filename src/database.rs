@@ -5,10 +5,11 @@ use futures::{Stream, TryStreamExt};
 use migration::{Migrator, MigratorTrait, OnConflict};
 use rspotify::prelude::Id;
 use sea_orm::{
-    prelude::*, ConnectOptions, DatabaseTransaction, DeleteResult, IntoActiveModel,
+    prelude::*, ConnectOptions, DatabaseTransaction, DeleteResult, IntoActiveModel, Iterable,
     TransactionError, TransactionTrait,
 };
 use time::OffsetDateTime;
+use tokio::try_join;
 use tracing::{error_span, info, Instrument};
 
 use crate::{
@@ -46,67 +47,43 @@ impl Database {
     }
 }
 
-pub struct LazyUser<'db> {
-    connection: &'db DatabaseConnection,
-
-    model: account::Model,
-}
-
-impl<'db> LazyUser<'db> {
-    pub fn account(&self) -> &account::Model {
-        &self.model
-    }
-
-    #[tracing::instrument(skip_all, fields(account = ?self.model.id))]
-    pub async fn spotify(&self) -> Result<spotify_auth::Model, InternalServerError> {
-        InternalServerError::wrap(
-            self.model.find_related(SpotifyAuth).one(self.connection),
-            error_span!("retrieving spotify auth details", account_id = ?self.model.id, spotify_user = self.model.spotify),
-        )
-        .await?
-        .ok_or_else(|| internal_server_error!("assuming a complete user"))
-    }
-
-    #[tracing::instrument(skip_all, fields(account = ?self.model.id))]
-    pub async fn github(&self) -> Result<github_auth::Model, InternalServerError> {
-        InternalServerError::wrap(
-            self.model.find_related(GithubAuth).one(self.connection),
-            error_span!("retrieving github auth details", account_id = ?self.model.id),
-        )
-        .await?
-        .ok_or_else(|| internal_server_error!("assuming a complete user")) // FIXME: bad assumption
-    }
-}
-
 impl Database {
     #[tracing::instrument(skip(self))]
     pub async fn list_users(
         &self,
-    ) -> Result<impl Stream<Item = Result<LazyUser, DbErr>> + Send + '_, InternalServerError> {
-        // let b = Account::find()
-        //     .join(
-        //         sea_orm::JoinType::LeftJoin,
-        //         account::Relation::SpotifyAuth.def(),
-        //     )
-        //     .column_as(spotify_auth::Column::AccessToken, "spotify_access_token")
-        //     .join(
-        //         sea_orm::JoinType::LeftJoin,
-        //         account::Relation::GithubAuth.def(),
-        //     )
-        //     .column_as(github_auth::Column::AccessToken, "github_access_token")
-        //     .build(sea_orm::DatabaseBackend::Postgres)
-        //     .to_string();
-
-        // tracing::info!("{b}");
-
+    ) -> Result<
+        impl Stream<Item = Result<authentication::Account, DbErr>> + Send + '_,
+        InternalServerError,
+    > {
+        // TODO: somehow use a transaction?
         Ok(InternalServerError::wrap(
             Account::find().stream(&self.connection),
             error_span!("finding all accounts"),
         )
         .await?
-        .map_ok(|model| LazyUser {
-            connection: &self.connection,
-            model,
+        .try_filter_map(|account| {
+            let connection = self.connection.clone();
+
+            async move {
+                // TODO: do these queries at the same time as the find query?
+                let (spotify, github) = try_join!(
+                    account.find_related(SpotifyAuth).one(&connection),
+                    account.find_related(GithubAuth).one(&connection)
+                )?;
+
+                if let Some(spotify) = spotify {
+                    return Ok(Some(authentication::Account {
+                        created_at: account.created_at,
+                        id: AccountId::from_model(account),
+
+                        spotify: SpotifyAuthentication::from_model(spotify),
+
+                        github: github.map(GithubAuthentication::from_model),
+                    }));
+                }
+
+                Ok(None)
+            }
         }))
     }
 }
@@ -251,6 +228,7 @@ impl Database {
     #[tracing::instrument(skip(self, spotify_auth), fields(spotify = spotify_auth.user_id.id()))]
     pub async fn login_user(
         &self,
+        user_session: Option<crate::router::session::UserSession>,
         spotify_auth: SpotifyAuthentication,
     ) -> Result<UserSessionId, InternalServerError> {
         self.connection
@@ -311,10 +289,16 @@ impl Database {
                             user_session::Model {
                                 created_at: OffsetDateTime::now_utc(),
                                 last_seen: OffsetDateTime::now_utc(),
-                                id: Uuid::new_v4(),
+                                id: user_session
+                                    .map_or_else(Uuid::new_v4, |session| session.id.into_uuid()),
                                 account: account.id,
                             }
                             .into_active_model(),
+                        )
+                        .on_conflict(
+                            OnConflict::column(user_session::Column::Id)
+                                .update_columns(user_session::Column::iter())
+                                .to_owned(),
                         )
                         .exec_with_returning(transaction),
                         error_span!("creating new user session", account = ?account.id),

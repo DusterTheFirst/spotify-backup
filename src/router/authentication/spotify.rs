@@ -32,10 +32,6 @@ pub async fn login(
     user_session: Option<UserSession>,
     query: Option<Query<SpotifyAuthCodeResponse>>,
 ) -> Result<Either<(UserSession, Redirect), Redirect>, InternalServerError> {
-    if let Some(session) = user_session {
-        database.logout_current_user(session).await?;
-    }
-
     let required_scopes = scopes!("playlist-read-private", "user-library-read");
 
     // FIXME: unify?
@@ -92,7 +88,7 @@ pub async fn login(
                 .await?;
 
                 let new_session = database
-                    .login_user(SpotifyAuthentication::create(token, user))
+                    .login_user(user_session, SpotifyAuthentication::create(token, user))
                     .await?;
 
                 Ok(Either::E1((

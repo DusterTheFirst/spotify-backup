@@ -2,8 +2,9 @@ use std::{convert::Infallible, time::Duration};
 
 use futures::StreamExt;
 use tokio::time::Instant;
+use tracing::Instrument;
 
-use crate::database::Database;
+use crate::{database::Database, router::authentication::github::GithubAuthentication};
 
 #[tracing::instrument(skip_all)]
 pub async fn backup(database: Database) -> Infallible {
@@ -24,16 +25,16 @@ pub async fn backup(database: Database) -> Infallible {
 
         tracing::info!("processing backups");
 
-        let mut users = match database.list_users().await {
+        let mut users = std::pin::pin!(match database.list_users().await {
             Ok(users) => users,
             Err(error) => {
                 tracing::error!(?error, "unable to list users");
                 continue;
             }
-        };
+        });
 
-        while let Some(user) = users.next().await {
-            let user = match user {
+        while let Some(account) = users.next().await {
+            let account = match account {
                 Ok(user) => user,
                 Err(error) => {
                     tracing::error!(?error, "unable to acquire next user");
@@ -41,10 +42,29 @@ pub async fn backup(database: Database) -> Infallible {
                 }
             };
 
-            let spotify = user.spotify().await;
-            let github = user.github().await;
+            let span = tracing::error_span!("backup_user", account = ?account.id);
+            async move {
+                tracing::debug!(account = ?account);
 
-            tracing::debug!(account = ?user.account(), ?spotify, ?github);
+                let github = match account.github.as_ref().map(GithubAuthentication::as_client) {
+                    Some(Ok(github)) => github,
+                    Some(Err(error)) => {
+                        tracing::warn!(%error, "failed to create github client from authentication details");
+
+                        return;
+                    }
+                    None => {
+                        tracing::trace!("incomplete user, missing github account... skipping");
+
+                        return;
+                    }
+                };
+                let spotify_client = account.spotify.as_client();
+
+                // TODO:
+                // spotify_client.current_user_saved_tracks(market)
+                // spotify_client.current_user_saved_albums(market)
+            }.instrument(span).await;
         }
 
         panic!();
