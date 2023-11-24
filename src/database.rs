@@ -67,6 +67,7 @@ pub trait PrefixExt {
     fn add_columns<T: EntityTrait>(self, entity: T) -> Self;
 }
 impl<E: EntityTrait> PrefixExt for Select<E> {
+    // TODO: somehow upstream to sea-orm
     fn add_columns<T: EntityTrait>(mut self, entity: T) -> Self {
         for col in <T::Column as sea_orm::entity::Iterable>::iter() {
             let alias = format!("{}{}", entity.table_name(), col.to_string()); // we use entity.table_name() as prefix
