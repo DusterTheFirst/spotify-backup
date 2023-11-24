@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use rspotify::prelude::Id;
 use sea_orm::prelude::Uuid;
 
@@ -11,6 +13,12 @@ impl GithubUserId {
 
     pub fn from_model(model: entity::github_auth::Model) -> Self {
         Self(model.user_id.parse().expect("user id should be an integer"))
+    }
+}
+
+impl Display for GithubUserId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -35,6 +43,12 @@ impl SpotifyUserId {
     }
 }
 
+impl Display for SpotifyUserId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AccountId(Uuid);
 
@@ -49,6 +63,12 @@ impl AccountId {
 
     pub fn into_uuid(self) -> Uuid {
         self.0
+    }
+}
+
+impl Display for AccountId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -67,5 +87,11 @@ impl UserSessionId {
     // TODO: do away with
     pub const fn from_raw(uuid: Uuid) -> Self {
         Self(uuid)
+    }
+}
+
+impl Display for UserSessionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }

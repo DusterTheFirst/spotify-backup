@@ -9,7 +9,6 @@ use axum_extra::either::Either3;
 use rspotify::prelude::OAuthClient;
 use serde::Deserialize;
 use time::OffsetDateTime;
-use tracing::error_span;
 
 use crate::{
     database::{id::AccountId, Database},

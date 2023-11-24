@@ -42,7 +42,7 @@ fn main() -> Result<(), color_eyre::Report> {
         ..Default::default()
     });
 
-    tokio::runtime::Builder::new_current_thread()
+    tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .expect("tokio runtime builder should succeed")

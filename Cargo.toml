@@ -21,7 +21,7 @@ resolver = "2"
 dioxus            = { version = "0.4.0", default-features = false, features = ["html", "macro"] }
 sea-orm           = { version = "0.12.6", default-features = false, features = ["debug-print", "macros", "postgres-array", "runtime-tokio-rustls", "sqlx-postgres", "with-time", "with-uuid"] }
 sea-orm-migration = { version = "0.12.6", default-features = false, features = ["cli", "runtime-tokio-rustls", "sqlx-postgres"] }
-tokio             = { version = "1.27.0", features = ["macros", "rt"] }
+tokio             = { version = "1.27.0", features = ["macros", "rt", "rt-multi-thread"] }
 
 [dependencies]
 # Web
@@ -31,10 +31,10 @@ dioxus      = { workspace = true }
 dioxus-ansi = { path = "crates/dioxus-ansi" }
 dioxus-ssr  = "0.4.0"
 tower       = { version = "0.4.13" }
-tower-http  = { version = "0.4.0", features = ["full"] }
+tower-http  = { version = "0.4.4", features = ["full"] }
 
 # Email
-lettre = { version = "0.10.4", default-features = false, features = ["builder", "hostname", "pool", "smtp-transport", "tokio1-rustls-tls"] }
+lettre = { version = "0.11.2", default-features = false, features = ["builder", "hostname", "pool", "smtp-transport", "tokio1-rustls-tls"] }
 
 # Github
 jsonwebtoken = "9.1.0"
@@ -55,6 +55,7 @@ migration = { path = "crates/migration" }
 sea-orm   = { workspace = true }
 
 # Utility
+async-stream = "0.3.5"
 const_format = { version = "0.2.30", features = ["rust_1_64"] }
 futures      = "0.3.28"
 git-version  = "0.3.5"

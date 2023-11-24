@@ -1,15 +1,14 @@
 use std::{env, fmt::Debug};
 
 use entity::{account, github_auth, prelude::*, spotify_auth, user_session};
-use futures::{Stream, TryStreamExt};
-use migration::{Migrator, MigratorTrait, OnConflict};
+use futures::{Stream, StreamExt};
+use migration::{IntoIden, Migrator, MigratorTrait, OnConflict};
 use rspotify::prelude::Id;
 use sea_orm::{
-    prelude::*, ConnectOptions, DatabaseTransaction, DeleteResult, IntoActiveModel, Iterable,
-    TransactionError, TransactionTrait,
+    prelude::*, sea_query, ConnectOptions, DatabaseTransaction, DeleteResult, FromQueryResult,
+    IntoActiveModel, Iterable, QuerySelect, TransactionError, TransactionTrait,
 };
 use time::OffsetDateTime;
-use tokio::try_join;
 use tracing::{error_span, info, Instrument};
 
 use crate::{
@@ -47,44 +46,68 @@ impl Database {
     }
 }
 
+impl FromQueryResult for authentication::Account {
+    fn from_query_result(res: &QueryResult, pre: &str) -> Result<Self, DbErr> {
+        let account = account::Model::from_query_result(res, account::Entity.table_name())?;
+        let spotify =
+            spotify_auth::Model::from_query_result(res, spotify_auth::Entity.table_name())?;
+        let github =
+            github_auth::Model::from_query_result_optional(res, github_auth::Entity.table_name())?;
+
+        Ok(authentication::Account {
+            created_at: account.created_at,
+            id: AccountId::from_model(account),
+            spotify: SpotifyAuthentication::from_model(spotify),
+            github: github.map(GithubAuthentication::from_model),
+        })
+    }
+}
+
+pub trait PrefixExt {
+    fn add_columns<T: EntityTrait>(self, entity: T) -> Self;
+}
+impl<E: EntityTrait> PrefixExt for Select<E> {
+    fn add_columns<T: EntityTrait>(mut self, entity: T) -> Self {
+        for col in <T::Column as sea_orm::entity::Iterable>::iter() {
+            let alias = format!("{}{}", entity.table_name(), col.to_string()); // we use entity.table_name() as prefix
+            QuerySelect::query(&mut self).expr(sea_query::SelectExpr {
+                expr: col.select_as(col.into_expr()),
+                alias: Some(sea_query::Alias::new(&alias).into_iden()),
+                window: None,
+            });
+        }
+        self
+    }
+}
+
 impl Database {
-    #[tracing::instrument(skip(self))]
+    // #[tracing::instrument(skip(self))]
     pub async fn list_users(
         &self,
-    ) -> Result<
-        impl Stream<Item = Result<authentication::Account, DbErr>> + Send + '_,
-        InternalServerError,
-    > {
+        page_size: u64,
+    ) -> impl Stream<Item = Result<authentication::Account, DbErr>> + Send + '_ {
         // TODO: somehow use a transaction?
-        Ok(InternalServerError::wrap(
-            Account::find().stream(&self.connection),
-            error_span!("finding all accounts"),
-        )
-        .await?
-        .try_filter_map(|account| {
-            let connection = self.connection.clone();
+        let mut paginator = Account::find()
+            .select_only()
+            .add_columns(Account)
+            .left_join(SpotifyAuth)
+            .add_columns(SpotifyAuth)
+            .left_join(GithubAuth)
+            .add_columns(GithubAuth)
+            .into_model::<authentication::Account>()
+            .paginate(&self.connection, page_size);
 
-            async move {
-                // TODO: do these queries at the same time as the find query?
-                let (spotify, github) = try_join!(
-                    account.find_related(SpotifyAuth).one(&connection),
-                    account.find_related(GithubAuth).one(&connection)
-                )?;
-
-                if let Some(spotify) = spotify {
-                    return Ok(Some(authentication::Account {
-                        created_at: account.created_at,
-                        id: AccountId::from_model(account),
-
-                        spotify: SpotifyAuthentication::from_model(spotify),
-
-                        github: github.map(GithubAuthentication::from_model),
-                    }));
-                }
-
-                Ok(None)
+        // FIXME:
+        // Manual into_stream()
+        Box::pin(async_stream::stream! {
+            while let Some(vec) = paginator.fetch_and_next().await? {
+                yield Ok(vec);
             }
-        }))
+        })
+        .flat_map(|vec| match vec {
+            Ok(vec) => futures::stream::iter(vec.into_iter().map(Ok)).boxed(),
+            Err(err) => futures::stream::once(async { Err(err) }).boxed(),
+        })
     }
 }
 

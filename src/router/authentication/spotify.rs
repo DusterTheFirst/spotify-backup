@@ -1,8 +1,11 @@
+use std::collections::{HashMap, HashSet};
+
 use axum::{
     extract::{Query, State},
     response::Redirect,
 };
 use axum_extra::either::Either;
+use once_cell::sync::Lazy;
 use rspotify::{
     model::{PrivateUser, UserId},
     prelude::OAuthClient,
@@ -27,19 +30,20 @@ pub enum SpotifyAuthCodeResponse {
     Failure { error: String, state: String },
 }
 
+static REQUIRED_SCOPES: Lazy<HashSet<String>> =
+    Lazy::new(|| scopes!("playlist-read-private", "user-library-read"));
+
 pub async fn login(
     State(AppState { database, .. }): State<AppState>,
     user_session: Option<UserSession>,
     query: Option<Query<SpotifyAuthCodeResponse>>,
 ) -> Result<Either<(UserSession, Redirect), Redirect>, InternalServerError> {
-    let required_scopes = scopes!("playlist-read-private", "user-library-read");
-
     // FIXME: unify?
     let auth = AuthCodeSpotify::new(
         SPOTIFY_ENVIRONMENT.credentials.clone(),
         rspotify::OAuth {
             redirect_uri: SPOTIFY_ENVIRONMENT.redirect_uri.to_string(),
-            scopes: required_scopes.clone(),
+            scopes: REQUIRED_SCOPES.clone(),
             ..Default::default()
         },
     );
@@ -71,11 +75,11 @@ pub async fn login(
                     .clone()
                     .expect("spotify client token should exist");
 
-                if !token.scopes.is_superset(&required_scopes) {
+                if !token.scopes.is_superset(&REQUIRED_SCOPES) {
                     return Err(internal_server_error!(
                         "spotify scopes did not match required scopes",
-                        ?required_scopes,
-                        ?token.scopes
+                        required_scopes = ?REQUIRED_SCOPES,
+                        scopes = ?token.scopes
                     ));
                 }
 
@@ -137,7 +141,7 @@ impl SpotifyAuthentication {
     }
 
     pub fn as_client(&self) -> AuthCodeSpotify {
-        AuthCodeSpotify::from_token(Token {
+        let mut client = AuthCodeSpotify::from_token(Token {
             access_token: self.access_token.expose_secret().clone(),
             expires_in: chrono::Duration::seconds(0),
             expires_at: Some(chrono::DateTime::from_naive_utc_and_offset(
@@ -149,7 +153,18 @@ impl SpotifyAuthentication {
             )),
             refresh_token: Some(self.refresh_token.expose_secret().clone()),
             scopes: scopes!("playlist-read-private", "user-library-read"),
-        })
+        });
+
+        // TODO: unify this wherever a client is needed
+        // FIXME: we do not re-store the new refreshed token... is that a problem?
+        client.creds = SPOTIFY_ENVIRONMENT.credentials.clone();
+        client.oauth = rspotify::OAuth {
+            redirect_uri: SPOTIFY_ENVIRONMENT.redirect_uri.to_string(),
+            scopes: REQUIRED_SCOPES.clone(),
+            ..Default::default()
+        };
+
+        client
     }
 
     pub fn into_model(self) -> entity::spotify_auth::Model {
