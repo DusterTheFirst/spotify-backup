@@ -1,6 +1,5 @@
 import { Environment, get_origin } from "./env";
 import "spotify-web-api-js";
-import html_response from "./render/response";
 import server_error from "./pages/error/500";
 
 const SPOTIFY_KV_TOKEN = "spotify-token";

@@ -9,7 +9,7 @@ import home from "./pages/home";
 import wet_run from "./pages/wet-run";
 import method_not_allowed from "./pages/error/405";
 import not_found from "./pages/error/404";
-import push_uptime from "./uptime-kuma";
+import { push_uptime_alive, push_uptime_authorized } from "./uptime-kuma";
 
 // IMPORTANT TODO: metrics and a way to tell when this starts to fail
 
@@ -17,7 +17,7 @@ export default {
     async fetch(
         request: Request,
         env: Partial<Environment>,
-        ctx: ExecutionContext
+        ctx: ExecutionContext,
     ): Promise<Response> {
         if (!is_environment(env)) {
             console.log("missing expected environment variables", env);
@@ -32,10 +32,12 @@ export default {
             // Forward assets requests to github pages for static assets
             if (url.pathname.startsWith("/assets/")) {
                 let response = await fetch(
-                    `https://dusterthefirst.github.io/spotify-backup/${url.pathname.replace(
-                        "/assets/",
-                        ""
-                    )}`
+                    `https://dusterthefirst.github.io/spotify-backup/${
+                        url.pathname.replace(
+                            "/assets/",
+                            "",
+                        )
+                    }`,
                 );
 
                 // If 404, pass on to other handlers
@@ -71,7 +73,7 @@ export default {
     async scheduled(
         event: ScheduledEvent,
         env: Partial<Environment>,
-        ctx: ExecutionContext
+        ctx: ExecutionContext,
     ): Promise<void> {
         if (!is_environment(env)) {
             console.log("missing expected environment variables", env);
@@ -79,7 +81,7 @@ export default {
         }
 
         // Report worker as up to uptime kuma
-        push_uptime(ctx);
+        push_uptime_alive(ctx);
 
         const spotify = await SpotifyClient.from_env(env);
 
@@ -87,6 +89,9 @@ export default {
             console.log("spotify not authenticated :(");
             return;
         }
+
+        // Report worker as authorized to uptime kuma
+        push_uptime_authorized(ctx);
 
         await real_wet_run(spotify, env);
 
